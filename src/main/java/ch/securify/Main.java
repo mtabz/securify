@@ -143,7 +143,7 @@ public class Main {
             }
             String map = elt.getValue().getAsJsonObject().get("srcmap-runtime").getAsString();
 
-            List<String> lines = Arrays.asList(bin);
+            List<String> lines = Collections.singletonList(bin);
             File binFile = File.createTempFile("securify_binary_", ".bin.hex");
             binFile.deleteOnExit();
             Files.write(Paths.get(binFile.getPath()), lines);
@@ -155,11 +155,14 @@ public class Main {
                 System.err.println("Error, skipping: " + elt.getKey());
             }
 
-            byte[] fileContent = Files.readAllBytes(new File(elt.getKey().split(":")[0]).toPath());
+            {
+                String fnContract = elt.getKey();
+                byte[] fileContent = Files.readAllBytes(new File(fnContract.substring(0, fnContract.lastIndexOf(':'))).toPath());
 
-            SolidityResult allPatternResults = CompilationHelpers.getMappingsFromStatusFile(livestatusfile, map, fileContent);
+                SolidityResult allPatternResults = CompilationHelpers.getMappingsFromStatusFile(livestatusfile, map, fileContent);
 
-            allContractResults.put(elt.getKey(), allPatternResults);
+                allContractResults.put(elt.getKey(), allPatternResults);
+            }
         }
 
         return allContractResults;
@@ -198,7 +201,9 @@ public class Main {
         contractResult.decompiled = true;
 
         if (decompilationOutputFile != null) {
-            new File(decompilationOutputFile).getAbsoluteFile().getParentFile().mkdirs();
+            if (new File(decompilationOutputFile).getAbsoluteFile().getParentFile().mkdirs()) {
+                throw new IOException("Error while making directory");
+            }
 
             Variable.setDebug(false);
             Files.write(Paths.get(decompilationOutputFile),
@@ -241,6 +246,11 @@ public class Main {
             return;
         }
 
+        if (args.descriptions && !args.jsonOutput) {
+            throw new ParameterException("--descriptions requires --json");
+        }
+
+
         if (args.verbose) {
             log = System.out;
         }
@@ -255,7 +265,9 @@ public class Main {
         if (args.livestatusfile != null) {
             lStatusFile = new File(args.livestatusfile);
             if (lStatusFile.getParentFile() != null) {
-                lStatusFile.getParentFile().mkdirs();
+                if (!lStatusFile.getParentFile().mkdirs()) {
+                    throw new IOException("Error while making directory");
+                }
             }
         } else {
             lStatusFile = File.createTempFile("securify_livestatusfile", "");
@@ -306,7 +318,6 @@ public class Main {
             processHexFile(args.filehex, args.decompoutputfile, livestatusfile);
         } else {
             new JCommander(args).usage();
-            return;
         }
     }
 
@@ -374,7 +385,7 @@ public class Main {
 //        allPatterns.add(new UseOfOrigin());
 //        allPatterns.add(new WriteOnly());
 
-        if (!Strings.isNullOrEmpty(args.patterns)) {
+        if (args != null && !Strings.isNullOrEmpty(args.patterns)) {
             List<String> wantedPatterns = new LinkedList<>();
             for (String patternName : args.patterns.split(",")) {
                 String tmp = patternName.trim().toLowerCase();

@@ -37,6 +37,7 @@ import ch.securify.decompiler.instructions.Stop;
 import ch.securify.decompiler.instructions.SelfDestruct;
 import ch.securify.decompiler.instructions._VirtualAssignment;
 import ch.securify.utils.StackUtil;
+import com.google.common.collect.BiMap;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.primitives.Ints;
@@ -55,7 +56,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static ch.securify.decompiler.instructions.Instruction.NO_VARIABLES;
-import static ch.securify.decompiler.printer.HexPrinter.toHex;
 import static ch.securify.utils.ArrayUtil.nextNonNullIndex;
 import static ch.securify.utils.ArrayUtil.nextNonNullItem;
 import static ch.securify.utils.ArrayUtil.prevNonNullIndex;
@@ -90,6 +90,8 @@ public class DestackerFallback {
 
 	private final boolean DEBUG = false;
 
+	private BiMap<Integer, String> tags;
+
 
 	/**
 	 * Decompile the bytecode.
@@ -98,7 +100,9 @@ public class DestackerFallback {
 	 * @param jumps maps jump instructions to their jump destinations.
 	 */
 	public void decompile(RawInstruction[] rawInstructions, InstructionFactory instructionFactory, Multimap<Integer, Integer> jumps,
-			Multimap<Integer, Integer> controlFlowGraph, final PrintStream log) {
+			Multimap<Integer, Integer> controlFlowGraph, final PrintStream log, BiMap<Integer, String> tags) {
+
+
 	    if (DEBUG)
 		    this.log = log;
 	    else
@@ -108,6 +112,7 @@ public class DestackerFallback {
 		this.jumps = jumps;
 		this.controlFlowGraph = controlFlowGraph;
 		this.instructionFactory = instructionFactory;
+		this.tags = tags;
 
 		this.instructions = new Instruction[rawInstructions.length];
 		this.argumentsForMethod = new HashMap<>();
@@ -178,15 +183,15 @@ public class DestackerFallback {
 						Push push = new Push(Ints.toByteArray(jumpdest));
 						push.setInput(NO_VARIABLES);
 						Variable pushVar = new Variable();
-						push.setOutput(new Variable[]{ pushVar });
+						push.setOutput(pushVar);
 						// create jump condition
 						Eq eq = new Eq();
-						eq.setInput(new Variable[]{ jumpDestVariable, pushVar });
+						eq.setInput(jumpDestVariable, pushVar);
 						Variable cond = new Variable();
-						eq.setOutput(new Variable[]{ cond });
+						eq.setOutput(cond);
 						// create jump instruction
 						JumpI jumpI = new JumpI(labelResolver.resolve(new RawInstruction(0, null, jumpdest, -1)));
-						jumpI.setInput(new Variable[]{ null, cond });
+						jumpI.setInput(null, cond);
 						jumpI.setOutput(NO_VARIABLES);
 						dynamicJumpReplacementTargets.put(jumpI, jumpdest);
 						// save new instrucitons
@@ -400,8 +405,9 @@ public class DestackerFallback {
     // Always true otherwise
 	private boolean findJumpCondition(Instruction jumpI, int jumpdest) {
 		if(jumpI instanceof JumpI) {
-			jumps.get(jumpI.getRawInstruction().offset).iterator().next();
-			return jumpdest == jumps.get(jumpI.getRawInstruction().offset).iterator().next();
+			String targetLabel = ((JumpI) jumpI).targetLabel;
+			String tag = tags.get(jumpdest);
+			return tag.equals(targetLabel);
 		}
 		// includes Jump case
 		return true;
@@ -445,7 +451,7 @@ public class DestackerFallback {
 						else {
 							Jump jumpInstruction = (Jump) instr;
 							// this assumes that we have no virtual jumpdests that have not been handled sparately
-							if (jumps.get(offset).stream().filter(target -> target >= 0).count() > 0) {
+							if (jumps.get(offset).stream().anyMatch(target -> target >= 0)) {
 								jumps.get(offset).stream().filter(target -> target >= 0)
 										.forEach(targetBco -> {
 											JumpDest jumpDest = (JumpDest) instructions[targetBco];

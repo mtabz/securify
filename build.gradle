@@ -1,13 +1,39 @@
 group 'ch.securify'
-version '0.1'
 
 apply plugin: 'java'
 apply plugin: 'idea'
 
+def computeVersion() {
+  if (System.env.SECURIFY_VERSION) {
+    return System.env.SECURIFY_VERSION;
+  }
+
+  def default_version = "unknown_version"
+
+  try {
+    def dirty = "git diff-index --quiet HEAD".execute()
+    dirty.waitFor()
+
+    def suffix = dirty.exitValue() ?  "-dirty" : ""
+
+    def proc = "git describe --long".execute()
+    proc.waitFor()
+
+    return proc.exitValue() ? default_version : proc.text.trim() + suffix
+  } catch (IOException e) {
+    return default_version
+  }
+}
+
+
 jar {
     manifest {
         attributes 'Main-Class': 'ch.securify.Main'
+        attributes('Implementation-Title': project.name,
+                   'Implementation-Version': computeVersion()
+                    )
     }
+
     from {
         configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
     }
@@ -26,7 +52,7 @@ repositories {
 
 dependencies {
     compile "com.beust:jcommander:1.48"
-    compile group: 'com.google.guava', name: 'guava', version: '19.0'
+    compile group: 'com.google.guava', name: 'guava', version: '27.0.1-jre'
     compile group: 'com.google.code.gson', name: 'gson', version: '2.8.0'
     // https://mvnrepository.com/artifact/org.apache.commons/commons-csv
     compile group: 'org.apache.commons', name: 'commons-csv', version: '1.4'

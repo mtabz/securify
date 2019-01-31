@@ -30,23 +30,17 @@ from . import utils
 
 def report(securify_target_output):
     """Report findings.
-
-    This function returns 0 if no violations are found, and 1 otherwise.
     """
     with open(securify_target_output) as file:
         json_report = json.load(file)
 
-    for contract in json_report.values():
-        for pattern in contract["results"].values():
-            if pattern["violations"]:
-                return 1
     return 0
 
 
 class Project(metaclass=abc.ABCMeta):
     """Abstract class implemented by projects using compilation and reporting.
     """
-    securify_jar = pathlib.Path("build/libs/securify-0.1.jar")
+    securify_jar = pathlib.Path("build/libs/securify.jar")
 
     def __init__(self, project_root, args, securify_flags):
         """Sets the project root.

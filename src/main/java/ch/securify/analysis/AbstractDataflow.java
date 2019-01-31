@@ -29,8 +29,14 @@ import org.apache.commons.csv.CSVRecord;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+
+import static com.google.common.io.Resources.copy;
+import static com.google.common.io.Resources.getResource;
 
 public abstract class AbstractDataflow {
 
@@ -69,28 +75,39 @@ public abstract class AbstractDataflow {
     protected final boolean DEBUG = false;
 
     // input predicates
-    protected String DL_EXEC;
+    private static String DL_FOLDER;
     private String WORKSPACE, WORKSPACE_OUT;
-    private final String SOUFFLE_BIN = "souffle";
-    private final String TIMEOUT_COMMAND = System.getProperty("os.name").toLowerCase().startsWith("mac") ? "gtimeout" : "timeout";
 
-    protected boolean isSouffleInstalled() {
-        try {
-            Process process = new ProcessBuilder(SOUFFLE_BIN).start();
-            process.waitFor();
-            return process.exitValue() == 0;
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-            return false;
+    public static void setDlFolder(String folder) {
+        DL_FOLDER = Objects.requireNonNull(folder);
+    }
+
+    /**
+     * Extract the Soufflé binaries and store them in a temporary folder to allow them to be executed
+     *
+     * @throws IOException
+     */
+    private static void extractSouffleBinaries() throws IOException {
+        String[] names = {MustExplicitDataflow.binaryName, MayImplicitDataflow.binaryName };
+        String souffleDir = Files.createTempDirectory("binaries_souffle").toFile().getAbsolutePath();
+        setDlFolder(souffleDir);
+        for(String resourceName : names) {
+            File binaryPath = Paths.get(souffleDir, resourceName).toFile();
+            OutputStream os = new FileOutputStream(binaryPath);
+            copy(getResource(resourceName), os);
+            os.close();
+            if (!binaryPath.setExecutable(true)) {
+                throw new IOException("Could not set the executable bit of a souffle binary in " + souffleDir);
+            }
         }
     }
 
-    protected void initDataflow() throws IOException, InterruptedException {
-        if(! isSouffleInstalled()){
-            System.err.println("Soufflé does not seem to be installed.");
-            System.exit(7);
+    protected void initDataflow(String binaryName) throws IOException, InterruptedException {
+        if (DL_FOLDER == null) {
+            extractSouffleBinaries();
         }
 
+        String DL_EXEC = DL_FOLDER + "/" + binaryName;
 
         varToCode = HashBiMap.create();
         instrToCode = HashBiMap.create();
@@ -124,12 +141,17 @@ public abstract class AbstractDataflow {
 
         log("Souffle Analysis");
 
-        // create workspace
-        Random rnd = new Random();
-        WORKSPACE = (new File(System.getProperty("java.io.tmpdir"), "souffle-" + UUID.randomUUID())).getAbsolutePath();
-        WORKSPACE_OUT = WORKSPACE + "_OUT";
-        runCommand("mkdir " + WORKSPACE);
-        runCommand("mkdir " + WORKSPACE_OUT);
+        File fWORKSPACE = (new File(System.getProperty("java.io.tmpdir"), "souffle-" + UUID.randomUUID()));
+        if (!fWORKSPACE.mkdir()) {
+            throw new IOException("Could not create temporary directory");
+        }
+        WORKSPACE = fWORKSPACE.getAbsolutePath();
+
+        File fWORKSPACE_OUT = new File(WORKSPACE + "_OUT");
+        if (!fWORKSPACE_OUT.mkdir()) {
+            throw new IOException("Could not create temporary directory");
+        }
+        WORKSPACE_OUT = fWORKSPACE_OUT.getAbsolutePath();
 
         deriveAssignVarPredicates();
         deriveAssignTypePredicates();
@@ -142,23 +164,22 @@ public abstract class AbstractDataflow {
         createProgramRulesFile();
         log("Number of instructions: " + instrToCode.size());
         log("Threshold: " + Config.THRESHOLD_COMPILE);
-        String cmd = TIMEOUT_COMMAND + " " + Config.PATTERN_TIMEOUT+ "s " + DL_EXEC + " -F " + WORKSPACE + " -D " + WORKSPACE_OUT;
+
         long start = System.currentTimeMillis();
-        log(cmd);
-        runCommand(cmd);
+        runCommand(new String[]{DL_EXEC, "-j", Integer.toString(Runtime.getRuntime().availableProcessors()), "-F", WORKSPACE, "-D", WORKSPACE_OUT});
+
         long elapsedTime = System.currentTimeMillis() - start;
         String elapsedTimeStr = String.format("%d min, %d sec",
                 TimeUnit.MILLISECONDS.toMinutes(elapsedTime),
                 TimeUnit.MILLISECONDS.toSeconds(elapsedTime) - TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(elapsedTime))
         );
+
         log(elapsedTimeStr);
     }
 
     public static int getInt(byte[] data) {
         byte[] bytes = new byte[4];
-        for (int i = 0; i < Math.min(data.length, 4); ++i) {
-            bytes[i + 4 - Math.min(data.length, 4)] = data[i];
-        }
+        System.arraycopy(data, 0, bytes, 4 - Math.min(data.length, 4), Math.min(data.length, 4));
         ByteBuffer bb = ByteBuffer.wrap(bytes);
         return bb.getInt();
     }
@@ -178,9 +199,9 @@ public abstract class AbstractDataflow {
     protected static long Encode(Integer... args) {
         assert(args.length <= 3);
         long entry = 0;
-        for (int i = 0; i < args.length; i++) {
+        for (Integer arg : args) {
             entry *= 80000;
-            entry += (long)args[i];
+            entry += (long)arg;
         }
         assert(entry >= 0);
         return entry;
@@ -199,24 +220,33 @@ public abstract class AbstractDataflow {
         }
     }
 
+    /**
+     * @param rootPath The directory to delete
+     * @throws IOException From the walk function
+     */
+    private void deleteDirectory(Path rootPath) throws IOException {
+        if (Files.walk(rootPath).sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .map(File::delete).anyMatch(e -> !e)) {
+            throw new IOException("Failure while deleting files");
+        }
+    }
+
     public void dispose() throws IOException, InterruptedException {
-        runCommand("rm -r " + WORKSPACE);
-        runCommand("rm -r " + WORKSPACE_OUT);
+        deleteDirectory(Paths.get(WORKSPACE));
+        deleteDirectory(Paths.get(WORKSPACE_OUT));
     }
 
     protected void readFixedpoint(String ruleName) throws IOException {
-
         Reader in = new FileReader(WORKSPACE_OUT + "/" + ruleName + ".csv");
         /* Tab-delimited format */
         Iterable<CSVRecord> records = CSVFormat.TDF.parse(in);
-        Set<Long> entries = new HashSet<Long>(100000000);
 
-        long count = 0;
-        for (CSVRecord record : records) {
-            count += 1;
-            entries.add(Encode(record));
-        }
+        Set<Long> entries = new HashSet<>();
+
+        records.forEach(record -> entries.add(Encode(record)));
         in.close();
+
         fixedpoint.put(ruleName, entries);
     }
 
@@ -230,52 +260,22 @@ public abstract class AbstractDataflow {
             } else {
                 return Status.UNSATISFIABLE;
             }
-        } catch (FileNotFoundException e) {
-            log("Souffle TIMEOUT, returns UNKNOWN");
-            return Status.UNKNOWN;
         } catch (IOException e) {
             log("Souffle TIMEOUT, returns UNKNOWN");
             return Status.UNKNOWN;
         }
     }
 
-    protected String runCommand(String command) throws IOException, InterruptedException {
-        Process proc;
-        String result = "";
-        log("CMD: " + command);
-
+    public static void runCommand(String[] command) throws IOException, InterruptedException {
         // Souffle works with this PATH
-        String[] envp = {"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/dani/bin"};
-        proc = Runtime.getRuntime().exec(command, envp);
+        String[] envp = {"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"};
 
-        // Read the output
-        BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()));
+        Process proc = Runtime.getRuntime().exec(command, envp);
 
-        // Output of the command
-        {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                result = result + line + "\n";
-                log(line);
-            }
+        if (!proc.waitFor(Config.PATTERN_TIMEOUT, TimeUnit.SECONDS) || proc.exitValue() != 0) {
+            proc.destroyForcibly();
+            throw new IOException(String.join(" ", command));
         }
-
-        // Display the errors
-        {
-            String line;
-            reader = new BufferedReader(new InputStreamReader(proc.getErrorStream()));
-
-            while ((line = reader.readLine()) != null) {
-                result = result + line + "\n";
-                log(line);
-            }
-        }
-
-        proc.waitFor();
-        if (proc.exitValue() != 0) {
-            throw new IOException();
-        }
-        return result;
     }
 
     public Variable getStorageVarForIndex(int index) {

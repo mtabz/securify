@@ -25,18 +25,12 @@ import ch.securify.decompiler.instructions.*;
 
 import ch.securify.decompiler.Variable;
 
-/**
- * @author andrei
- *
- */
 public class MustExplicitDataflow extends AbstractDataflow {
-
-    public MustExplicitDataflow(){}
+    static final public String binaryName = "mustExplicit";
 
     public MustExplicitDataflow(List<Instruction> decompiledInstructions) throws IOException, InterruptedException {
-        DL_EXEC = "build/mustExplicit";
         instructions = decompiledInstructions;
-        initDataflow();
+        initDataflow(binaryName);
     }
 
     @Override
@@ -165,7 +159,7 @@ public class MustExplicitDataflow extends AbstractDataflow {
 
         if (to instanceof JumpDest) {
             //appendRule("join", getCode(from), getCode(to));
-            List<Instruction> incomingBranches = new ArrayList<Instruction>(((JumpDest) to).getIncomingBranches());
+            List<Instruction> incomingBranches = new ArrayList<>(((JumpDest) to).getIncomingBranches());
             if (to.getPrev() != null) {
                 incomingBranches.add(to.getPrev());
             }

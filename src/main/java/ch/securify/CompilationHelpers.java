@@ -1,13 +1,12 @@
 package ch.securify;
 
 import ch.securify.analysis.SecurifyErrors;
+import ch.securify.utils.Hex;
 import com.google.common.base.CharMatcher;
 import com.google.gson.*;
 
-import javax.xml.bind.DatatypeConverter;
 import java.io.File;
 import java.io.IOException;
-import java.lang.RuntimeException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -47,22 +46,22 @@ class MappingNotFoundException extends RuntimeException {
 public class CompilationHelpers {
     public static String sanitizeLibraries(String hexCode) {
         final String dummyAddress = "1000000000000000000000000000000000000010";
-        String sanitized = "";
+        StringBuilder sanitized = new StringBuilder();
         for (int i = 0; i < hexCode.length(); i++) {
             if (hexCode.charAt(i) == '_') {
-                sanitized += dummyAddress;
+                sanitized.append(dummyAddress);
                 i += dummyAddress.length() - 1;
             } else {
-                sanitized += hexCode.charAt(i);
+                sanitized.append(hexCode.charAt(i));
             }
         }
-        return sanitized;
+        return sanitized.toString();
     }
 
     public static byte[] extractBinaryFromHexFile(String filehex) throws IOException {
         File contractBinHexFile = new File(filehex);
         String hexCode = Files.readAllLines(contractBinHexFile.toPath()).get(0);
-        return DatatypeConverter.parseHexBinary(sanitizeLibraries(hexCode));
+        return Hex.decode(sanitizeLibraries(hexCode));
     }
 
     static int bytecodeOffsetToSourceOffset(int bytecodeOffset, List<String[]> map) throws MappingNotFoundException {
@@ -75,7 +74,11 @@ public class CompilationHelpers {
         reverse(map);
         for (String[] offset : map) {
             if (!offset[0].equals("")) {
-                return Integer.parseInt(offset[0]);
+                int res = Integer.parseInt(offset[0]);
+                if (res < 0) {
+                   throw new MappingNotFoundException();
+                }
+                return res;
             }
         }
         throw new MappingNotFoundException();

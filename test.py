@@ -40,7 +40,7 @@ def raise_mismatch(expected, current, pat=None):
     msg = [f'Current: {current}', f'expected: {expected}']
 
     if pat is not None:
-        msg.append('pattern: {pat}')
+        msg.append(f'pattern: {pat}')
 
     raise MismatchError(', '.join(msg))
 
@@ -61,7 +61,10 @@ def check_all_patterns(curr_json, expc_json, contract):
     """Checks every pattern from the given json
     """
     res = 'results'
-    curr_res = curr_json[contract][res]
+    try:
+        curr_res = curr_json[contract][res]
+    except KeyError:
+        curr_res = ""
     exp_res = expc_json[contract][res]
 
     for pat in exp_res:
@@ -85,13 +88,22 @@ def check_securify_errors(curr_json, expc_json, contract):
     """Checks that the error output is the same.
     """
     err = 'securifyErrors'
-    curr_errors = curr_json[contract][err]
+    try:
+        curr_errors = curr_json[contract][err]
+    except KeyError:
+        curr_errors = ""
+
     expc_errors = expc_json[contract][err]
 
     # we don't care if the line of the error changed in the Java source
     if not equal_string_modulo_digits(curr_errors, expc_errors):
         print('Different Securify errors:')
         raise_mismatch(expc_errors, curr_errors)
+
+
+def rewrite_json_output(curr_json, outj):
+    with open(outj, 'w') as fso:
+        json.dump(curr_json, fso, sort_keys=True, indent=2)
 
 
 def test_securify_analysis(c_file, json_output, memory=8, overwrite=False):
@@ -111,8 +123,10 @@ def test_securify_analysis(c_file, json_output, memory=8, overwrite=False):
         output = Path(tmpdir) / 'sec_output.json'
 
         cmd = ['java',
+               # enable assertions
+               '-ea',
                f'-Xmx{memory}G',
-               '-jar', 'build/libs/securify-0.1.jar',
+               '-jar', 'build/libs/securify.jar',
                '-fs', c_file,
                '-o', output]
 
@@ -125,11 +139,6 @@ def test_securify_analysis(c_file, json_output, memory=8, overwrite=False):
             print(exn.output.decode('utf-8'))
             raise exn
 
-        if overwrite:
-            print('Overwriting.')
-            shutil.copy(output, json_output)
-            return
-
         with open(output) as fsc:
             curr_json = json.load(fsc)
 
@@ -137,8 +146,16 @@ def test_securify_analysis(c_file, json_output, memory=8, overwrite=False):
             expc_json = json.load(fsj)
 
     for contract in expc_json:
-        check_securify_errors(curr_json, expc_json, contract)
-        check_all_patterns(curr_json, expc_json, contract)
+        try:
+            check_securify_errors(curr_json, expc_json, contract)
+            check_all_patterns(curr_json, expc_json, contract)
+        except MismatchError as e:
+            if not overwrite:
+                raise e
+
+            print('Overwriting.')
+            rewrite_json_output(curr_json, json_output)
+            return
 
 
 def test(tests_dir, overwrite=False, recursive=False):
