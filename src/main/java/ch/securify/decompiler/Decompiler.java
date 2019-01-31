@@ -18,6 +18,8 @@
 
 package ch.securify.decompiler;
 
+import static ch.securify.decompiler.AbstractDecompiler.findTags;
+import static ch.securify.decompiler.AbstractDecompiler.parseRawInstructions;
 import static ch.securify.utils.ArrayUtil.nextNonNullItem;
 import static ch.securify.utils.ArrayUtil.prevNonNullItem;
 
@@ -65,6 +67,12 @@ public class Decompiler extends AbstractDecompiler {
     private static PrintStream log;
     private static final boolean DEBUG = false;
 
+	/**
+	 *
+	 * @param bytecode
+	 * @param _log
+	 * @return
+	 */
 	public static List<Instruction> decompile(final byte[] bytecode, final PrintStream _log) {
         if (DEBUG)
             log = _log;
@@ -98,7 +106,7 @@ public class Decompiler extends AbstractDecompiler {
 		{
 			Multimap<Integer, Integer> reversedBranches = controlFlowDetector.getBranchesReversed();
 			//noinspection ConstantConditions // suppress NPE warnings
-			Collection<MethodDetector.MethodInfo> methodInfos = IntStream.range(0, rawInstructions.length)
+			Collection<ch.securify.decompiler.MethodDetector.MethodInfo> methodInfos = IntStream.range(0, rawInstructions.length)
 					.filter(bco -> rawInstructions[bco] != null)
 					// find all JUMPDEST instructions (i.e. method heads) ..
 					.filter(methodHead -> rawInstructions[methodHead].opcode == OpCodes.JUMPDEST)

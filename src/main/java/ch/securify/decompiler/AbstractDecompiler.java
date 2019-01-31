@@ -80,6 +80,15 @@ public class AbstractDecompiler {
 		} while (removedSomething);
 	}
 
+	/**
+	 * Map bytecode offsets to tags/labels and vice versa.
+	 *
+	 * TODO: Test case
+	 *
+	 * @param log
+	 * @param jumpDestinations
+	 * @return
+	 */
 	protected static BiMap<Integer, String> findTags(final PrintStream log, List<Integer> jumpDestinations) {
 		// print tags (jumpdests)
 		log.println();
