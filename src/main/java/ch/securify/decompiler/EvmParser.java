@@ -25,9 +25,6 @@ public class EvmParser {
 
 	/**
 	 * Parse the EVM bytecode.
-	 *
-	 * TODO: Write Test case for this
-	 *
 	 * @param bytecode plain bytecode.
 	 * @param operationParsedCallback callback invoked for each parsed operation.
 	 */

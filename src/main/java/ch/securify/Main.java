@@ -97,20 +97,9 @@ public class Main {
     private static Args args;
 
 
-    /**
-     * Takes the solidity file and compiles it
-     *
-     * @param solcPath
-     * @param filesol
-     * @param livestatusfile
-     * @return TreeMap<String, SolidityResult>
-     * @throws IOException
-     * @throws InterruptedException
-     */
     public static TreeMap<String, SolidityResult> processSolidityFile(String solcPath, String filesol, String livestatusfile) throws IOException, InterruptedException {
         JsonObject compilationOutput = CompilationHelpers.compileContracts(solcPath, filesol);
 
-        /* Take compilation output and process it further */
         return processCompilationOutput(compilationOutput, livestatusfile);
     }
 
@@ -119,22 +108,11 @@ public class Main {
         return processCompilationOutput(compilationOutput, livestatusfile );
     }
 
-    /**
-     * Takes the output of the compiler and then applies the rest of the process.
-     *
-     * @param compilationOutput
-     * @param livestatusfile
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
-     */
     public static TreeMap<String, SolidityResult> processCompilationOutput(JsonObject compilationOutput, String livestatusfile) throws IOException, InterruptedException {
-        // Create new Set with compilation output?
         Set<Map.Entry<String, JsonElement>> entries = compilationOutput.entrySet();
 
         TreeMap<String, SolidityResult> allContractResults = new TreeMap<>();
         for (Map.Entry<String, JsonElement> elt : entries) {
-            // Thought this was already initialised before?
             initPatterns(args);
             progressPrinter.println("Processing contract: " + elt.getKey());
 
@@ -143,8 +121,6 @@ public class Main {
                 log.println("Skipping empty contract: " + elt.getKey());
                 continue;
             }
-
-            // Source map; I guess this is a binary file?
             String map = elt.getValue().getAsJsonObject().get("srcmap-runtime").getAsString();
 
             List<String> lines = Arrays.asList(bin);
@@ -170,15 +146,6 @@ public class Main {
     }
 
 
-    /**
-     * Process the hex file
-     *
-     * @param hexBinaryFile
-     * @param decompilationOutputFile
-     * @param livestatusfile
-     * @throws IOException
-     * @throws InterruptedException
-     */
     private static void processHexFile(String hexBinaryFile, String decompilationOutputFile, String livestatusfile) throws IOException, InterruptedException {
         if (!new File(hexBinaryFile).exists()) {
             throw new IllegalArgumentException("File '" + hexBinaryFile + "' not found");
@@ -234,13 +201,9 @@ public class Main {
         updateContractAnalysisStatus(livestatusfile);
     }
 
-    /**
-     * Main entry
-     * */
     public static void main(String[] rawrgs) throws IOException, InterruptedException {
         args = new Args();
 
-        /* JCommander parses the command line arguments that have been entered */
         try {
             new JCommander(args, rawrgs);
         } catch (ParameterException e) {
@@ -257,10 +220,8 @@ public class Main {
             progressPrinter = new DevNullPrintStream();
         }
 
-        /* All patterns that it uses are initialised here */
         initPatterns(args);
 
-        /* Do we have a status file to write to? */
         File lStatusFile;
         if (args.livestatusfile != null) {
             lStatusFile = new File(args.livestatusfile);
@@ -274,7 +235,7 @@ public class Main {
         }
         String livestatusfile = lStatusFile.getPath();
 
-        /* If have received a solodity file then compile it */
+
         if (args.filesol != null || args.compilationoutput != null) {
             TreeMap<String, SolidityResult> allContractsResults;
             if (args.filesol != null) {
@@ -283,11 +244,8 @@ public class Main {
                 allContractsResults = mainFromCompilationOutput(args.compilationoutput, livestatusfile);
             }
 
-            // Gson is a Java library that can be used to convert Java Objects into their JSON representation.
-            // It can also be used to convert a JSON string to an equivalent Java object.
             GsonBuilder gb = new GsonBuilder();
             if (args.descriptions) {
-                // Configures Gson to excludes all class fields that have the specified modifiers.
                 // by default, TRANSIENT and STATIC are excluded; include static here, since the descriptions are a
                 // static field (sort of a hack).
                 gb.excludeFieldsWithModifiers(Modifier.TRANSIENT);
@@ -296,7 +254,6 @@ public class Main {
 
             if (args.outputfile != null) {
                 try (Writer writer = new FileWriter(args.outputfile)) {
-                    // Converts the Java allContractsResults object to JSON
                     gson.toJson(allContractsResults, writer);
                 } catch (Exception ex) {
                     throw new RuntimeException(ex);

@@ -94,16 +94,6 @@ public class CompilationHelpers {
         return new String(encoded, Charset.defaultCharset());
     }
 
-    /**
-     * Takes name of solidity file and uses it to launch a compilation process
-     *
-     * @param solc
-     * @param filesol
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
-     * @throws RuntimeException
-     */
     static JsonObject compileContracts(String solc, String filesol) throws IOException, InterruptedException, RuntimeException {
         ProcessBuilder p = new ProcessBuilder(solc, "--combined-json", "abi,ast,bin-runtime,srcmap-runtime", filesol);
 
@@ -113,9 +103,7 @@ public class CompilationHelpers {
         File fErr = File.createTempFile("securify_compilation_error", ".log");
         fErr.deleteOnExit();
 
-        /* Kick-off the compile process and redirect error and output */
         final Process process = p.redirectOutput(f).redirectError(fErr).start();
-        /* Wait for process to terminate. Polls process regularly */
         process.waitFor();
 
         int exitValue = process.exitValue();
@@ -124,19 +112,12 @@ public class CompilationHelpers {
             throw new RuntimeException();
         }
 
-        /* If compilation succeeds then JSON object is produced */
+
         JsonObject jsonObject = new JsonParser().parse(readFile(f.getPath())).getAsJsonObject();
 
         return jsonObject.get("contracts").getAsJsonObject();
     }
 
-    /**
-     * Takes compilation output JSON string and parses it.
-     *
-     * @param compilationOutputFile
-     * @return
-     * @throws IOException
-     */
     static JsonObject parseCompilationOutput(String compilationOutputFile) throws IOException {
         return new JsonParser().parse(readFile(compilationOutputFile)).getAsJsonObject();
     }
