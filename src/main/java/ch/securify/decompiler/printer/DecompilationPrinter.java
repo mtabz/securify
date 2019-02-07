@@ -20,6 +20,8 @@ package ch.securify.decompiler.printer;
 
 import ch.securify.decompiler.instructions.Instruction;
 import ch.securify.decompiler.instructions._VirtualMethodHead;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.PrintStream;
 import java.util.List;
@@ -28,7 +30,7 @@ public class DecompilationPrinter {
 
 
 	/**
-	 * Print decompiled code.
+	 * Print decompiled code using (stdout if it exists).
 	 * @param instructions
 	 * @param out
 	 */
@@ -42,5 +44,18 @@ public class DecompilationPrinter {
 		});
 	}
 
-
+	/**
+	 * Print decompiled code using logger.
+	 * @param instructions
+	 * @param callingLogger
+	 */
+	public static void printInstructions(List<Instruction> instructions, Logger callingLogger) {
+		// print the decompiled code
+		instructions.forEach(instruction -> {
+			if (instruction instanceof _VirtualMethodHead) {
+				callingLogger.trace("----");
+			}
+			callingLogger.trace(instruction.getDebugRepresentation());
+		});
+	}
 }

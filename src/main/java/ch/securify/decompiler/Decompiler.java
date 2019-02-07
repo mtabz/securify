@@ -58,6 +58,7 @@ import ch.securify.decompiler.instructions._VirtualMethodHead;
 import ch.securify.decompiler.instructions._VirtualMethodInvoke;
 import ch.securify.decompiler.instructions._VirtualMethodReturn;
 import ch.securify.decompiler.printer.HexPrinter;
+import ch.securify.decompiler.printer.DecompilationPrinter;
 import ch.securify.utils.ArrayUtil;
 
 public class Decompiler extends AbstractDecompiler {
@@ -91,8 +92,9 @@ public class Decompiler extends AbstractDecompiler {
 
 
 		// search jumpdests corresponding to methods' start
-		log.println();
-		log.println("Begin-of-methods:");
+		/* log.println();
+		log.println("Begin-of-methods:"); */
+		logger.debug("Begin-of-methods:");
 		/* List of bytecode offsets that correspond to begin-of-methods. */
 		Map<Integer, MethodDetector.MethodInfo> methods = new HashMap<>();
 		{
@@ -147,20 +149,27 @@ public class Decompiler extends AbstractDecompiler {
 
 			methodInfos.forEach(methodInfo -> methods.put(methodInfo.getHead(), methodInfo));
 
-			log.println("(" + methodInfos.size() + " methods total)");
-
-			methodInfos.forEach(methodInfo -> {
+			// log.println("(" + methodInfos.size() + " methods total)");
+			logger.debug("(" + methodInfos.size() + " methods total)");
+			/* methodInfos.forEach(methodInfo -> {
 				log.println("detected method @" + HexPrinter.toHex(methodInfo.head) + " (" + tags.get(methodInfo.head) + ")");
 				log.println("    returning from: " + HexPrinter.toHex(methodInfo.returns, ", "));
 				log.println("    called from:  " + HexPrinter.toHex(methodInfo.calls, ", "));
 				log.println("    returning to: " + HexPrinter.toHex(methodInfo.returnDests, ", "));
+			}); */
+			methodInfos.forEach(methodInfo -> {
+				logger.debug("detected method @" + HexPrinter.toHex(methodInfo.head) + " (" + tags.get(methodInfo.head) + ")");
+				logger.debug("    returning from: " + HexPrinter.toHex(methodInfo.returns, ", "));
+				logger.debug("    called from:  " + HexPrinter.toHex(methodInfo.calls, ", "));
+				logger.debug("    returning to: " + HexPrinter.toHex(methodInfo.returnDests, ", "));
 			});
 		}
 
 
 		// get ABI method IDs
-		log.println();
-		log.println("ABI Method IDs:");
+		/* log.println();
+		log.println("ABI Method IDs:"); */
+		logger.debug("ABI Method IDs:");
 		/* Map bytecode offsets of tags of branch starts to the corresponding method IDs and vice versa. */
 		BiMap<Integer, byte[]> branchBcoToAbiMethodId = HashBiMap.create();
 		{
@@ -226,8 +235,10 @@ public class Decompiler extends AbstractDecompiler {
 				}
 			}
 
+			/* branchBcoToAbiMethodId.forEach((bco, methodId) ->
+					log.println(tags.get(bco) + " belongs to branch of ABI method ID " + HexPrinter.toHex(methodId))); */
 			branchBcoToAbiMethodId.forEach((bco, methodId) ->
-					log.println(tags.get(bco) + " belongs to branch of ABI method ID " + HexPrinter.toHex(methodId)));
+					logger.debug(tags.get(bco) + " belongs to branch of ABI method ID " + HexPrinter.toHex(methodId)));
 		}
 
 
@@ -249,7 +260,8 @@ public class Decompiler extends AbstractDecompiler {
 				}
 
 				String methodLabel = _VirtualMethodHead.METHOD_NAME_PREFIX_ABI + HexPrinter.toHex(methodId);
-				log.println(tags.get(beginOfMethodBco) + " renamed to " + methodLabel);
+				// log.println(tags.get(beginOfMethodBco) + " renamed to " + methodLabel);
+				logger.debug(tags.get(beginOfMethodBco) + " renamed to " + methodLabel);
 				// override tag name
 				tags.put(beginOfMethodBco, methodLabel);
 
@@ -257,10 +269,19 @@ public class Decompiler extends AbstractDecompiler {
 			});
 
 			// rename other unknown methods
-			methodHeads.forEach(methodHead -> {
+			/* methodHeads.forEach(methodHead -> {
 				if (!renamedMethodLabels.contains(methodHead)) {
 					String methodLabel = _VirtualMethodHead.METHOD_NAME_PREFIX_UNKNOWN + HexPrinter.toHex(methodHead);
 					log.println(tags.get(methodHead) + " renamed to " + methodLabel);
+					// override tag name
+					tags.put(methodHead, methodLabel);
+					renamedMethodLabels.add(methodHead);
+				}
+			}); */
+			methodHeads.forEach(methodHead -> {
+				if (!renamedMethodLabels.contains(methodHead)) {
+					String methodLabel = _VirtualMethodHead.METHOD_NAME_PREFIX_UNKNOWN + HexPrinter.toHex(methodHead);
+					logger.debug(tags.get(methodHead) + " renamed to " + methodLabel);
 					// override tag name
 					tags.put(methodHead, methodLabel);
 					renamedMethodLabels.add(methodHead);
@@ -270,15 +291,20 @@ public class Decompiler extends AbstractDecompiler {
 
 
 		// print method signatures
-		log.println("Method signatures:");
-		methodHeads.forEach(methodHead -> log.println(tags.get(methodHead)
+		// log.println("Method signatures:");
+		logger.debug("Method signatures:");
+		/* methodHeads.forEach(methodHead -> log.println(tags.get(methodHead)
+				+ " (" + String.join(",", Collections.nCopies(methodDetector.getArgumentCountForMethod(methodHead), "a")) + ")"
+				+ " -> (" + String.join(",", Collections.nCopies(methodDetector.getReturnVarCountForMethod(methodHead), "r")) + ")")); */
+		methodHeads.forEach(methodHead -> logger.debug(tags.get(methodHead)
 				+ " (" + String.join(",", Collections.nCopies(methodDetector.getArgumentCountForMethod(methodHead), "a")) + ")"
 				+ " -> (" + String.join(",", Collections.nCopies(methodDetector.getReturnVarCountForMethod(methodHead), "r")) + ")"));
 
 
 		// Decompile the whole thing
-		log.println();
-		log.println("Decompiling...");
+		/* log.println();
+		log.println("Decompiling..."); */
+		logger.debug("Decompiling...");
 		{
 			Destacker destacker = new Destacker();
 
@@ -327,11 +353,12 @@ public class Decompiler extends AbstractDecompiler {
 				});
 			}
 
+			logger.trace("RAW Decompile");
 			//System.out.println("RAW DEC");
-			//DecompilationPrinter.printInstructions(decompiledInstructions, System.out);
+			DecompilationPrinter.printInstructions(decompiledInstructions, logger);
 
-			log.println("Remove unused instructions...");
-
+			// log.println("Remove unused instructions...");
+			logger.debug("Remove unused instructions (noop'd (dup, swap, pop))...");
 			// removing bytecode ops that have been noop'd (dup, swap, pop)
 			decompiledInstructions.removeIf(instruction -> {
 				if (instruction instanceof _NoOp) {
@@ -342,6 +369,7 @@ public class Decompiler extends AbstractDecompiler {
 				return false;
 			});
 
+			logger.debug("Remove unused jumpdests (labels)...");
 			// remove unused jumpdests (labels)
 			decompiledInstructions.removeIf(instruction -> {
 				if (instruction instanceof JumpDest && ((JumpDest) instruction).getIncomingBranches()
@@ -360,13 +388,14 @@ public class Decompiler extends AbstractDecompiler {
 					.filter(instruction -> !(instruction instanceof _VirtualInstruction)) // exclude method instructions
 					.forEach(instruction -> instruction.getInput()[0] = null);
 
-
+			logger.debug("Creating dependency graph.");
 			// create dependency graph on instructions to detect unused/dead instructions
 			DependencyResolver.resolveDependencies(decompiledInstructions);
 
 			removeUnusedInstructions(decompiledInstructions);
 
-			if (destacker.sawMergeWithDiffStackSize) log.println("size-mismatch merger");
+			// if (destacker.sawMergeWithDiffStackSize) log.println("size-mismatch merger");
+			if (destacker.sawMergeWithDiffStackSize) logger.debug("Size-mismatch merger");
 
 			return decompiledInstructions;
 		}

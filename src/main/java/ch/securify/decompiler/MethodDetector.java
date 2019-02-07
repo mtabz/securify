@@ -66,6 +66,9 @@ public class MethodDetector {
 
 	/**
 	 * Reaolve methods and their properties.
+	 *
+	 * TODO: Test case
+	 *
 	 * @param rawInstructions EVM visited.
 	 * @param jumps maps jump visited to their jump destinations.
 	 * @param cfg control flow graph.

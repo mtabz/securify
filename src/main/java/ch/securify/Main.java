@@ -43,6 +43,10 @@ import java.util.stream.Collectors;
 
 import static ch.securify.CompilationHelpers.parseCompilationOutput;
 
+// Import log4j classes.
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 
 public class Main {
 
@@ -96,6 +100,8 @@ public class Main {
     private static PrintStream progressPrinter = System.out;
     private static Args args;
 
+    private static final Logger logger = LogManager.getLogger();
+
     /**
      * Takes the solidity file and compiles it
      *
@@ -135,13 +141,17 @@ public class Main {
             // Thought this was already initialised before? I guess need to re-init for every contract?
             initPatterns(args);
             progressPrinter.println("Processing contract: " + elt.getKey());
+            logger.info("Processing contract: " + elt.getKey());
 
             String bin = elt.getValue().getAsJsonObject().get("bin-runtime").getAsString();
+            logger.debug("bin-runtime: ", elt);
             if (bin.equals("")) {
                 log.println("Skipping empty contract: " + elt.getKey());
+                logger.info("Skipping empty contract: " + elt.getKey());
                 continue;
             }
             String map = elt.getValue().getAsJsonObject().get("srcmap-runtime").getAsString();
+            logger.debug("srcmap-runtime: ", map);
 
             List<String> lines = Collections.singletonList(bin);
             File binFile = File.createTempFile("securify_binary_", ".bin.hex");
@@ -153,6 +163,7 @@ public class Main {
             } catch(Exception e) {
                 e.printStackTrace();
                 System.err.println("Error, skipping: " + elt.getKey());
+                logger.error("Error, skipping: " + elt.getKey());
             }
 
             {
@@ -171,6 +182,8 @@ public class Main {
     /**
      * Process the hex file
      *
+     * TODO Test case
+     *
      * @param hexBinaryFile
      * @param decompilationOutputFile
      * @param livestatusfile
@@ -179,6 +192,7 @@ public class Main {
      */
     private static void processHexFile(String hexBinaryFile, String decompilationOutputFile, String livestatusfile) throws IOException, InterruptedException {
         if (!new File(hexBinaryFile).exists()) {
+            logger.error("File '" + hexBinaryFile + "' not found");
             throw new IllegalArgumentException("File '" + hexBinaryFile + "' not found");
         }
 
@@ -202,6 +216,7 @@ public class Main {
 
         if (decompilationOutputFile != null) {
             if (new File(decompilationOutputFile).getAbsoluteFile().getParentFile().mkdirs()) {
+                logger.error("Error while making directory");
                 throw new IOException("Error while making directory");
             }
 
@@ -214,10 +229,12 @@ public class Main {
         }
 
         progressPrinter.println("  Verifying patterns...");
+        logger.info("  Verifying patterns...");
         try {
             checkPatterns(instructions, livestatusfile);
         } catch(Exception e) {
             handleSecurifyError("pattern_error", e);
+            logger.error("pattern_error", e);
             throw e;
         } finally {
             finishContractResult(livestatusfile);
@@ -226,6 +243,7 @@ public class Main {
 
     private static void handleSecurifyError(String errorMessage, Exception e){
         System.err.println("Error in Securify");
+        logger.error("decompilation_error", e);
         contractResult.securifyErrors.add(errorMessage, e);
     }
 
@@ -242,6 +260,7 @@ public class Main {
             new JCommander(args, rawrgs);
         } catch (ParameterException e) {
             log.println(e.getMessage());
+            logger.error(e.getMessage());
             new JCommander(args).usage();
             return;
         }
@@ -331,28 +350,34 @@ public class Main {
         List<Instruction> instructions;
         try {
             progressPrinter.println("  Attempt to decompile the contract with methods...");
+            logger.info("Attempt to decompile the contract with methods...");
             instructions = Decompiler.decompile(binary, log);
 
             progressPrinter.println("  Success. Inlining methods...");
+            logger.info("Success. Inlining methods...");
             instructions = MethodInliner.inline(instructions, log);
         } catch (Exception e1) {
             log.println(e1.getMessage());
             progressPrinter.println("  Failed to decompile methods. Attempt to decompile the contract without identifying methods...");
-
+            logger.error(e1.getMessage());
+            logger.error("  Failed to decompile methods. Attempt to decompile the contract without identifying methods...");
             try {
                 instructions = DecompilerFallback.decompile(binary, log);
             } catch (Exception e2) {
                 progressPrinter.println("  Decompilation failed.");
+                logger.error("Decompilation failed.");
                 throw e2;
             }
         }
 
         progressPrinter.println("  Propagating constants...");
+        logger.info("Propagating constants...");
         ConstantPropagation.propagate(instructions);
 
         log.println();
         log.println("Decompiled contract:");
-        DecompilationPrinter.printInstructions(instructions, log);
+        logger.info("Decompiled contract:");
+        DecompilationPrinter.printInstructions(instructions, logger);
 
         return instructions;
     }
@@ -418,6 +443,7 @@ public class Main {
         if (!methodsDecompiled) {
             // no methods, compute a single global dataflow fixpoint and check all patterns
             log.println("Computing global dataflow fixpoint over the entire contract...");
+            logger.info("Computing global dataflow fixpoint over the entire contract...");
             AbstractDataflow dataflow = DataflowFactory.getDataflow(instructions);
             for (AbstractPattern pattern : patterns) {
                 if (pattern instanceof MissingInputValidation) {
@@ -433,6 +459,7 @@ public class Main {
                 } catch (Exception e) {
                     handleSecurifyError("check_pattern_" + pattern.getClass().getName(), e);
                     e.printStackTrace();
+                    logger.error("check_pattern_" + pattern.getClass().getName(), e);
                 }
             }
             dataflow.dispose();
@@ -440,9 +467,11 @@ public class Main {
             // split instructions into methods and check them independently
             for (List<Instruction> body : splitInstructionsIntoMethods(instructions)) {
                 log.println("Analyzing method with " + body.size() + " instructions:");
-                DecompilationPrinter.printInstructions(body, log);
+                logger.info("Analyzing method with " + body.size() + " instructions:");
+                DecompilationPrinter.printInstructions(body, logger);
 
                 log.println("Computing dataflow fixpoint over the method body...");
+                logger.info("Computing dataflow fixpoint over the method body...");
                 AbstractDataflow bodyDataflow = DataflowFactory.getDataflow(body);
                 for (AbstractPattern pattern : patterns) {
                     if (!(pattern instanceof AbstractInstructionPattern))
@@ -453,12 +482,14 @@ public class Main {
                     } catch (Exception e) {
                         handleSecurifyError("check_pattern_" + pattern.getClass().getName(), e);
                         e.printStackTrace();
+                        logger.error("check_pattern_" + pattern.getClass().getName(), e);
                     }
                 }
                 bodyDataflow.dispose();
             }
 
             log.println("Computing global dataflow fixpoint over the entire contract...");
+            logger.info("Computing global dataflow fixpoint over the entire contract...");
             AbstractDataflow globalDataflow = DataflowFactory.getDataflow(instructions);
             for (AbstractPattern pattern : patterns) {
                 if (!(pattern instanceof AbstractContractPattern))
@@ -469,6 +500,7 @@ public class Main {
                 } catch (Exception e) {
                     handleSecurifyError("check_pattern_" + pattern.getClass().getName(), e);
                     e.printStackTrace();
+                    logger.error("check_pattern_" + pattern.getClass().getName(), e);
                 }
             }
             globalDataflow.dispose();
@@ -482,6 +514,7 @@ public class Main {
         PatternResult status = contractResult.patternResults.get(pattern.getClass().getSimpleName());
 
         log.println("Checking pattern " + pattern.getClass().getSimpleName() + ": ");
+        logger.info("Checking pattern " + pattern.getClass().getSimpleName() + ": ");
 
         try {
             pattern.checkPattern(methodInstructions, contractInstructions, dataflow);
@@ -489,6 +522,7 @@ public class Main {
             status.error = e instanceof UnsupportedOperationException ? "not supported" : "analysis failed";
             handleSecurifyError("check_instructions" + pattern.getClass().getName(), e);
             e.printStackTrace();
+            logger.error("check_instructions " + pattern.getClass().getName(), e);
         }
 
         status.completed = true;
@@ -510,6 +544,11 @@ public class Main {
         log.println("\tSafe: " + pattern.getSafe().stream().map(Object::toString).collect(Collectors.joining("\n\t\t")));
         log.println("\tConflicts: " + pattern.getConflicts().stream().map(Object::toString).collect(Collectors.joining("\n\t\t")));
         log.println();
+
+        logger.info("\tViolations:" + pattern.getViolations().stream().map(Object::toString).collect(Collectors.joining("\n\t\t")));
+        logger.info("\tWarnings: " + pattern.getWarnings().stream().map(Object::toString).collect(Collectors.joining("\n\t\t")));
+        logger.info("\tSafe: " + pattern.getSafe().stream().map(Object::toString).collect(Collectors.joining("\n\t\t")));
+        logger.info("\tConflicts: " + pattern.getConflicts().stream().map(Object::toString).collect(Collectors.joining("\n\t\t")));
 
         updateContractAnalysisStatus(livestatusfile);
     }

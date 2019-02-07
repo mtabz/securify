@@ -4,6 +4,8 @@ import ch.securify.analysis.SecurifyErrors;
 import ch.securify.utils.Hex;
 import com.google.common.base.CharMatcher;
 import com.google.gson.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,6 +46,8 @@ class MappingNotFoundException extends RuntimeException {
 }
 
 public class CompilationHelpers {
+    private static final Logger logger = LogManager.getLogger();
+
     public static String sanitizeLibraries(String hexCode) {
         final String dummyAddress = "1000000000000000000000000000000000000010";
         StringBuilder sanitized = new StringBuilder();
@@ -76,11 +80,13 @@ public class CompilationHelpers {
             if (!offset[0].equals("")) {
                 int res = Integer.parseInt(offset[0]);
                 if (res < 0) {
+                   logger.error("mapping_error", res);
                    throw new MappingNotFoundException();
                 }
                 return res;
             }
         }
+        logger.error("Mapping not found");
         throw new MappingNotFoundException();
     }
 
@@ -99,6 +105,8 @@ public class CompilationHelpers {
 
     /**
      * Takes name of solidity file and uses it to launch a compilation process
+     *
+     * TODO: Compilation Test case?
      *
      * @param solc
      * @param filesol
@@ -124,11 +132,14 @@ public class CompilationHelpers {
         int exitValue = process.exitValue();
         if(exitValue != 0){
             System.err.print(readFile(fErr.getPath()));
+            logger.error(readFile(fErr.getPath()));
             throw new RuntimeException();
         }
 
         // If compilation succeeds then JSON object is produced
         JsonObject jsonObject = new JsonParser().parse(readFile(f.getPath())).getAsJsonObject();
+
+        logger.debug(jsonObject);
 
         return jsonObject.get("contracts").getAsJsonObject();
     }
@@ -156,9 +167,13 @@ public class CompilationHelpers {
             } catch (MappingNotFoundException e) {
                 line = -1;
                 securifyErrors.add("mapping_error", e);
+                logger.error("mapping_error", e);
             }
             matchedLines.add(line);
         }
+
+        logger.trace(matchedLines);
+
         return matchedLines;
     }
 

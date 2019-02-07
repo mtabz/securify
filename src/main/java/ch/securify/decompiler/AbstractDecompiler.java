@@ -38,8 +38,11 @@ import ch.securify.decompiler.instructions.Instruction;
 import ch.securify.decompiler.instructions.Push;
 import ch.securify.decompiler.instructions._VirtualAssignment;
 import ch.securify.decompiler.printer.HexPrinter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class AbstractDecompiler {
+	protected static final Logger logger = LogManager.getLogger();
 
 	private static boolean removeInstruction(Instruction instruction) {
 		if (instruction.getPrev() == null || instruction.getNext() == null)
@@ -61,14 +64,17 @@ public class AbstractDecompiler {
 					return false; // keep used instructions
 				}
 				if (instruction instanceof Push) {
+				    logger.trace("Removed push instr" + instruction.getDebugRepresentation());
 					return removeInstruction(instruction); // remove unused pushed variables
 				}
 				if (instruction instanceof _VirtualAssignment) {
+                    logger.trace("Removed virtual assignment instr" + instruction.getDebugRepresentation());
 					return removeInstruction(instruction); // remove unused reassignments
 				}
 				if (instruction.getOutput().length >= 1 && instruction.getRawInstruction() != null) {
 					int opcode = instruction.getRawInstruction().opcode;
 					if ((OpCodes.ADD <= opcode && opcode <= OpCodes.BYTE)) {
+                        logger.trace("Removed unused arith instr" + instruction.getDebugRepresentation());
 						return removeInstruction(instruction); // remove unused arithmetic instructions
 					}
 				}
@@ -88,8 +94,9 @@ public class AbstractDecompiler {
 	 */
 	protected static BiMap<Integer, String> findTags(final PrintStream log, List<Integer> jumpDestinations) {
 		// print tags (jumpdests)
-		log.println();
-		log.println("Tags:");
+		/* log.println();
+		log.println("Tags:"); */
+		logger.debug("Tags:");
 		/* Map bytecode offsets to tags/labels and vice versa. */
 		BiMap<Integer, String> tags = HashBiMap.create();
 		{
@@ -97,7 +104,8 @@ public class AbstractDecompiler {
 				Integer bytecodeOffset = jumpDestinations.get(i);
 				String tagLabel = "tag_" + (i + 1);
 				tags.put(bytecodeOffset, tagLabel);
-				log.println(tagLabel + " @" + HexPrinter.toHex(bytecodeOffset));
+				// log.println(tagLabel + " @" + HexPrinter.toHex(bytecodeOffset));
+				logger.debug(tagLabel + " @" + HexPrinter.toHex(bytecodeOffset));
 			}
 			// add virtual tags (error and exit)
 			tags.put(ControlFlowDetector.DEST_ERROR, "ERROR");
@@ -119,11 +127,22 @@ public class AbstractDecompiler {
 		});
 	}
 
+	/**
+	 * TODO: Test Case
+	 * @param log
+	 * @param rawInstructions
+	 * @param jumpDestinations
+	 * @param tags
+	 * @param controlFlowDetector
+	 * @param mapJumpsToDests
+	 * @return
+	 */
 	protected static Multimap<Integer, Integer> dectectControlFlow(final PrintStream log, RawInstruction[] rawInstructions, List<Integer> jumpDestinations, BiMap<Integer, String> tags, ControlFlowDetector controlFlowDetector,
 			Multimap<Integer, Integer> mapJumpsToDests) {
 				// scan for branches, generate a control flow graph
-				log.println();
-				log.println("Control Flow (Branches):");
+				/* log.println();
+				log.println("Control Flow (Branches):"); */
+				logger.debug("Control Flow (Branches):");
 
 				controlFlowDetector.computeBranches(rawInstructions, log);
 				/* Control flow graph: maps from jumps to possible jump destinations and
@@ -145,7 +164,8 @@ public class AbstractDecompiler {
 								targetName = "local" + " @" + HexPrinter.toHex(target);
 							else
 								targetName = tags.get(target) + " @" + HexPrinter.toHex(target);
-							log.println(HexPrinter.toHex(branchSrc) + " -> " + targetName);
+							// log.println(HexPrinter.toHex(branchSrc) + " -> " + targetName);
+							logger.debug(HexPrinter.toHex(branchSrc) + " -> " + targetName);
 						}
 					}
 
@@ -156,6 +176,8 @@ public class AbstractDecompiler {
 						if (rawInstructions[branchSrc].opcode == OpCodes.JUMP) {
 							if (jumpTargets.size() != 1 && !ControlFlowDetector.isJumpMethodReturn(branchSrc, rawInstructions)) {
 								// disallow jumps with multiple targets (except method returns)
+								logger.error("Jumps with ambiguous jump targets are not supported: " +
+										"Jumping from " + HexPrinter.toHex(branchSrc) + " to " + HexPrinter.toHex(jumpTargets, ","));
 								throw new IllegalArgumentException("Jumps with ambiguous jump targets are not supported: " +
 										"Jumping from " + HexPrinter.toHex(branchSrc) + " to " + HexPrinter.toHex(jumpTargets, ","));
 							}
@@ -163,13 +185,18 @@ public class AbstractDecompiler {
 						}
 						else if (rawInstructions[branchSrc].opcode == OpCodes.JUMPI) {
 							if (jumpTargets.size() > 2) {
+								logger.error("Jumps with ambiguous jump targets are not supported: " +
+										"Jumping from " + HexPrinter.toHex(branchSrc) + " to " + HexPrinter.toHex(jumpTargets, ","));
 								throw new IllegalArgumentException("Jumps with ambiguous jump targets are not supported: " +
 										"Jumping from " + HexPrinter.toHex(branchSrc) + " to " + HexPrinter.toHex(jumpTargets, ","));
 							}
 							else if (jumpTargets.size() == 1) {
-								log.println("Warning: Conditional jump @" + HexPrinter.toHex(branchSrc) + " with both paths " +
+								logger.warn("Warning: Conditional jump @" + HexPrinter.toHex(branchSrc) + " with both paths " +
 										"leading to same destination @" + HexPrinter.toHex(Iterables.get(jumpTargets, 0)) + ". " +
 										"Please check if this is true.");
+								/* log.println("Warning: Conditional jump @" + HexPrinter.toHex(branchSrc) + " with both paths " +
+										"leading to same destination @" + HexPrinter.toHex(Iterables.get(jumpTargets, 0)) + ". " +
+										"Please check if this is true."); */
 							}
 							// contitional jumps we get both the jump destination and the linear execution branch
 							int jumpDest1 = Iterables.get(jumpTargets, 0);
@@ -185,10 +212,16 @@ public class AbstractDecompiler {
 						}
 					}
 
-					log.println("Jumps:");
-					mapJumpsToDests.asMap().forEach(
+					// log.println("Jumps:");
+					/* mapJumpsToDests.asMap().forEach(
 							(src, dsts) -> dsts.forEach(
 									dst -> log.println(HexPrinter.toHex(src) + " -> " + tags.get(dst))
+							)
+					); */
+					logger.debug("Jumps:");
+					mapJumpsToDests.asMap().forEach(
+							(src, dsts) -> dsts.forEach(
+									dst -> logger.debug(HexPrinter.toHex(src) + " -> " + tags.get(dst))
 							)
 					);
 				}

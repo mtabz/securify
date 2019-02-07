@@ -73,6 +73,9 @@ public class ControlFlowDetector {
 
 	/**
 	 * Create a control flow graph.
+	 *
+	 * TODO: Test case
+	 *
 	 * @param rawInstructions EVM instructions.
 	 */
 	public void computeBranches(RawInstruction[] rawInstructions, final PrintStream log) {

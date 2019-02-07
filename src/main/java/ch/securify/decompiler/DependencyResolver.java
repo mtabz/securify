@@ -21,6 +21,8 @@ package ch.securify.decompiler;
 import ch.securify.decompiler.instructions.JumpDest;
 import ch.securify.decompiler.instructions.Instruction;
 import ch.securify.decompiler.instructions._VirtualInstruction;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,6 +36,7 @@ import java.util.stream.Stream;
 
 public class DependencyResolver {
 
+	protected static final Logger logger = LogManager.getLogger();
 
 	/**
 	 * Create a dependency graph for the instructions.
@@ -52,6 +55,7 @@ public class DependencyResolver {
 	public static void resolveDependencies(List<Instruction> instructions, boolean ignoreUnresolved) {
 		instructions.forEach(instruction -> {
 					// determine dependencies for this instruction
+					logger.trace("Dependencies for instr:" + instruction.getDebugRepresentation());
 					Stream.concat(Arrays.stream(instruction.getInput()), instruction.getMemoryInputs().stream())
 							.filter(Objects::nonNull)
 							// determine dependencies for this variable
@@ -61,11 +65,13 @@ public class DependencyResolver {
 								boolean foundDependency = false;
 
 								Instruction prevInstr = instruction.getPrev();
+								logger.trace("Prev instr: " + prevInstr.getDebugRepresentation());
 								while (prevInstr != null || (prevInstr = branchesToProcess.poll()) != null) {
 									if (processedInstructions.contains(prevInstr)) {
 										prevInstr = null;
 										continue;
 									}
+									logger.trace("Add to procd instr Set: " + prevInstr.getDebugRepresentation());
 									processedInstructions.add(prevInstr);
 
 									boolean ioMatch = Arrays.stream(prevInstr.getOutput()).anyMatch(outputVar -> outputVar == inputVar);
@@ -83,6 +89,9 @@ public class DependencyResolver {
 									prevInstr = prevInstr.getPrev();
 								}
 								if (!foundDependency && !ignoreUnresolved) {
+									logger.error("Dependency resolver reached method head. " +
+											"Should have resolved all dependencies by now (but didn't for '" + inputVar + "'). " +
+											"Possible use of undeclared variable in this scope.");
 									throw new IllegalStateException("Dependency resolver reached method head. " +
 											"Should have resolved all dependencies by now (but didn't for '" + inputVar + "'). " +
 											"Possible use of undeclared variable in this scope.");
