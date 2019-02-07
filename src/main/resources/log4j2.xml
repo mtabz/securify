@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%highlight{%date{HH:mm:ss} [%class{1}.%method:%line] %-5level %msg %ex%n}"/>
+    </Console>
+    <File name="LogFile" fileName="logs/my.log">
+      <PatternLayout pattern="%date{HH:mm:ss} [%class{1}.%method:%line] %-5level %msg %ex%n"/>
+    </File>
+  </Appenders>
+  <Loggers>
+    <Root level="trace">
+      <!-- Uncomment where you want log files to be output" -->
+      <!-- <AppenderRef ref="Console"/> -->
+      <AppenderRef ref="LogFile"/>
+    </Root>
+  </Loggers>
+</Configuration>
