@@ -62,7 +62,7 @@ public class DecompilerFallback extends AbstractDecompiler {
 
         // Decompile the whole thing
         log.println();
-        log.println("Decompiling...");
+        log.println("Decompiling (Fallback)...");
         {
             DestackerFallback destacker = new DestackerFallback();
 

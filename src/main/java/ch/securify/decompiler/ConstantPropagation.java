@@ -34,6 +34,8 @@ import ch.securify.decompiler.instructions._VirtualInstruction;
 import ch.securify.decompiler.instructions._VirtualMethodHead;
 import ch.securify.decompiler.instructions._VirtualMethodReturn;
 import ch.securify.utils.BigIntUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.math.BigInteger;
 import java.security.MessageDigest;
@@ -50,6 +52,7 @@ import java.util.TreeMap;
 
 public class ConstantPropagation {
 
+	private static final Logger logger = LogManager.getLogger();
 
 	public static List<Instruction> propagate(List<Instruction> instructions) {
 		Queue<Instruction> branchesToProcess = new LinkedList<>();
@@ -69,14 +72,18 @@ public class ConstantPropagation {
 			}
 			ProgramState programState = canonicalProgramStates.get(instruction);
 			if (programState == null) {
+				logger.error("no ProgramState available at instruction " +
+						instruction.getDebugRepresentation().replaceAll("\\s+", " "));
 				throw new IllegalStateException("no ProgramState available at instruction " +
 						instruction.getDebugRepresentation().replaceAll("\\s+", " "));
 			}
-			do {
+			do {	// Process all instructions
+				logger.trace("Processing: " + instruction.getDebugRepresentation());
 				if (instruction instanceof JumpDest) {
 					if (processedInstructions.contains(instruction)) {
 						// reached merger through linear flow
 						// should only happen for loop branches, otherwise the local flow should be always processed first
+						logger.trace("Reached merger through linear flow for: " + instruction.getDebugRepresentation());
 						break; // continue with next branch
 					}
 
@@ -85,6 +92,7 @@ public class ConstantPropagation {
 							|| (instruction.getPrev() != null && !processedInstructions.contains(instruction.getPrev()));
 					if (unprocessedPrecedingBranches && consecutiveDelayedBranches <= branchesToProcess.size()) {
 						// postpone this branch because of unprocessed preceding instructions
+						logger.trace("Branch postponed due to unprocessed preceders: " + instruction.getDebugRepresentation());
 						consecutiveDelayedBranches++;
 						branchesToProcess.add(instruction);
 
@@ -125,10 +133,12 @@ public class ConstantPropagation {
 					if (storeOffsetVar.hasConstantValue()) {
 						BigInteger storeOffset = BigIntUtil.fromInt256(storeOffsetVar.getConstantValue());
 						programState.storage.put(storeOffset, valueVar);
+						logger.trace("SStore Offset " + storeOffset + "Value " + valueVar);
 					}
 					else {
 						// write to unknown location: clear whole storage
 						programState.polluteStorage(valueVar);
+						logger.trace("Unknown location. Clear storage: " + valueVar);
 					}
 				}
 				// handle memory writes
@@ -144,11 +154,13 @@ public class ConstantPropagation {
 						//	BigInteger invalidatedMemOffset = memOffset.subtract(BigInteger.valueOf(i));
 						//	programState.heap.remove(invalidatedMemOffset);
 						//}
+						logger.trace("MStore Offset " + memOffsetVar + "Value " + valueVar);
 					}
 					else {
 						// write to unknown location: clear whole memory
 						// TODO: keep entry at 0x40? since that is the memory index root? (applies to all global wipes)
 						programState.polluteMemory(valueVar);
+						logger.trace("Unknown location. Clear storage: " + valueVar);
 					}
 				}
 				else if (instruction instanceof MStore8) {
@@ -163,10 +175,12 @@ public class ConstantPropagation {
 						//	BigInteger invalidatedMemOffset = memOffset.subtract(BigInteger.valueOf(i));
 						//	programState.heap.remove(invalidatedMemOffset);
 						//}
+						logger.trace("MStore Offset " + memOffsetVar + "Value " + valueVar);
 					}
 					else {
 						// write to unknown location: clear whole memory
 						programState.polluteMemory(valueVar);
+						logger.trace("Unknown location. Clear storage: " + valueVar);
 					}
 				}
 				else if (instruction instanceof Call || instruction instanceof StaticCall) {
@@ -201,11 +215,13 @@ public class ConstantPropagation {
 						Variable pollution = new Variable();
 						pollution.addValueType(Variable.TYPE_ANY);
 						programState.polluteMemory(pollution); // TODO: pollute with what?
+						logger.trace("Write to unknown location. Clear storage: " + pollution);
 					}
 				}
 
 				// check if any input variable depends on an unprocessed instructions
 				// in that case we can't know the output values
+				logger.trace("Checking if any input var of" + instruction.getDebugRepresentation() + "depends on unproc.d instrs");
 				boolean foundUnprocessedDependency = false;
 				out: for (Variable input : instruction.getInput()) {
 					// search all instructions that have this variable as an output.
@@ -224,9 +240,11 @@ public class ConstantPropagation {
 
 						boolean ioMatch = Arrays.stream(prevInstr.getOutput()).anyMatch(outputVar -> outputVar == input);
 						if (ioMatch) {
+							logger.trace("Matched input to output of prevInstr " + prevInstr.getDebugRepresentation());
 							if (!processedInstructions.contains(prevInstr)) {
 								// unprocessed dependency -> set output to ANY
 								foundUnprocessedDependency = true;
+								logger.trace("None of the processed instr contains this instr => Unprocessed Dependency");
 								break out;
 							}
 							prevInstr = null;
@@ -234,6 +252,7 @@ public class ConstantPropagation {
 						}
 
 						if (prevInstr instanceof JumpDest && !(prevInstr instanceof _VirtualInstruction)) {
+							logger.trace("PrevInstr is a Jump. Adding all incoming branches for processing.");
 							backtrackBranchesToProcess.addAll(((JumpDest) prevInstr).getIncomingBranches());
 						}
 
@@ -248,6 +267,7 @@ public class ConstantPropagation {
 				}
 				else {
 					// if all ok, compute a constant value
+					logger.trace("Computing symbol result values and types");
 					instruction.computeResultValues();
 					instruction.computeResultTypes();
 				}
@@ -258,6 +278,7 @@ public class ConstantPropagation {
 					if (memOffsetVar.hasConstantValue()) {
 						BigInteger memOffset = BigIntUtil.fromInt256(memOffsetVar.getConstantValue());
 						Variable valueVar = programState.heap.get(memOffset);
+						logger.trace("MLoad has constant value: " + valueVar);
 						if (valueVar != null) {
 							if (valueVar.hasConstantValue()) {
 								// copy constant value over to output variable
@@ -271,6 +292,7 @@ public class ConstantPropagation {
 					}
 					else {
 						// unknown location: add all variables in memory as possible dependencies
+						logger.trace("MLoad has unknown location. Adding all vars as possible dependencies.");
 						Instruction finalInstruction = instruction;
 						programState.heap.forEach((offset, variable) -> {
 							finalInstruction.addMemoryInput(variable);
@@ -287,6 +309,7 @@ public class ConstantPropagation {
 				else if (instruction instanceof Sha3) {
 					Variable memOffsetVar = instruction.getInput()[0];
 					if (memOffsetVar.hasConstantValue()) {
+						logger.trace("SHA-3 has constant value");
 						BigInteger memOffset = BigIntUtil.fromInt256(memOffsetVar.getConstantValue());
 
 						Variable memLengthVar = instruction.getInput()[1];
@@ -303,6 +326,7 @@ public class ConstantPropagation {
 						Instruction finalInstruction = instruction;
 						programState.heap.forEach((offset, variable) -> {
 							if (memRangeStart.compareTo(offset) <= 0 && (memRangeEnd == null || offset.compareTo(memRangeEnd) < 0)) {
+								logger.trace("Add Mem In Var: " + variable);
 								finalInstruction.addMemoryInput(variable);
 								finalInstruction.getOutput()[0].addValueTypes(variable.getValueTypes());
 							}
@@ -324,13 +348,16 @@ public class ConstantPropagation {
 								finalInstruction.getOutput()[0].setConstantValue(digest.digest());
 							}
 						} catch (NoSuchAlgorithmException e) {
+							logger.error("No SHA-256");
 							throw new RuntimeException("No SHA-256");
 						}
 					}
 					else {
 						// unknown location: add all variables in memory as possible dependencies
+						logger.trace("SHA-3 has unknown location. Adding all vars as possible dependencies.");
 						Instruction finalInstruction = instruction;
 						programState.heap.forEach((offset, variable) -> {
+							logger.trace("Add Mem In Var: " + variable);
 							finalInstruction.addMemoryInput(variable);
 							finalInstruction.getOutput()[0].addValueTypes(variable.getValueTypes());
 						});
@@ -347,8 +374,10 @@ public class ConstantPropagation {
 					Variable inputMemLengthVar = instruction.getInput()[4];
 					if (inputMemLengthVar.hasConstantValue() && BigIntUtil.fromInt256(inputMemLengthVar.getConstantValue()).equals(BigInteger.ZERO)) {
 						// zero-length target memory
+						logger.trace("Call has zero-length memory");
 					}
 					else if (inputMemOffsetVar.hasConstantValue()) {
+						logger.trace("Call has constant value");
 						BigInteger memOffset = BigIntUtil.fromInt256(inputMemOffsetVar.getConstantValue());
 
 						BigInteger memRangeEnd;
@@ -364,12 +393,14 @@ public class ConstantPropagation {
 						Instruction instructionF = instruction;
 						programState.heap.forEach((offset, variable) -> {
 							if (memRangeStart.compareTo(offset) <= 0 && (memRangeEnd == null || offset.compareTo(memRangeEnd) < 0)) {
+								logger.trace("Add Mem In Var: " + variable);
 								instructionF.addMemoryInput(variable);
 							}
 						});
 					}
 					else {
 						// could be anything, independent of our local memory state
+						logger.trace("Call not sure of value");
 					}
 				}
 				// handle storage reads
@@ -378,6 +409,7 @@ public class ConstantPropagation {
 					if (storeOffsetVar.hasConstantValue()) {
 						BigInteger storeOffset = BigIntUtil.fromInt256(storeOffsetVar.getConstantValue());
 						Variable valueVar = programState.storage.get(storeOffset);
+						logger.trace("SLoad has constant value: " + valueVar);
 						if (valueVar != null) {
 							if (valueVar.hasConstantValue()) {
 								// copy constant value over to output variable
@@ -391,8 +423,10 @@ public class ConstantPropagation {
 					}
 					else {
 						// unknown read location: load everything possible
+						logger.trace("SLoad has unknown read location. Adding all vars as possible dependencies.");
 						Instruction finalInstruction = instruction;
 						programState.storage.forEach((offset, variable) -> {
+							logger.trace("Add Mem In Var: " + variable);
 							finalInstruction.addMemoryInput(variable);
 							finalInstruction.getOutput()[0].addValueTypes(variable.getValueTypes());
 						});
@@ -407,12 +441,14 @@ public class ConstantPropagation {
 				else if (instruction instanceof MSize) {
 					if (programState.msize.signum() != -1) {
 						// copy heap size value
+						logger.trace("MSize: Setting heap size to: " + BigIntUtil.toInt256(programState.msize));
 						instruction.getOutput()[0].setConstantValue(BigIntUtil.toInt256(programState.msize));
 					}
 				}
 
 				processedInstructions.add(instruction);
 
+				// TODO: Instrument this code
 				if (instruction instanceof BranchInstruction
 						&& !(instruction instanceof _VirtualMethodReturn)) {
 					BranchInstruction src = (BranchInstruction) instruction;

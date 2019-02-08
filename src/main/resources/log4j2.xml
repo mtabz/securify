@@ -9,10 +9,13 @@
     </File>
   </Appenders>
   <Loggers>
-    <Root level="trace">
+    <Root level="TRACE">
       <!-- Uncomment where you want log files to be output" -->
       <!-- <AppenderRef ref="Console"/> -->
       <AppenderRef ref="LogFile"/>
     </Root>
+    <logger name="ch.securify.decompiler" level="TRACE" additivity="false">
+  		<AppenderRef ref="LogFile"/>
+  	</logger>
   </Loggers>
 </Configuration>

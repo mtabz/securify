@@ -28,6 +28,8 @@ import ch.securify.decompiler.instructions._VirtualMethodHead;
 import ch.securify.decompiler.instructions._VirtualMethodInvoke;
 import ch.securify.decompiler.instructions._VirtualMethodReturn;
 import ch.securify.utils.StackUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -47,6 +49,8 @@ public class MethodInliner {
 
 	private final PrintStream log;
 
+	private static final Logger logger = LogManager.getLogger();
+
 
 	private MethodInliner(PrintStream log) {
 		this.log = log;
@@ -61,7 +65,8 @@ public class MethodInliner {
 	private List<Instruction> process(List<Instruction> instructions) {
 		if (instructions.stream().noneMatch(instruction -> instruction instanceof _VirtualMethodHead)) {
 			// no methods found, so nothing to be inlined
-			log.println("[MINL] no methods found");
+			// log.println("[MINL] no methods found");
+			logger.trace("[MINL] no methods found");
 			return instructions;
 		}
 
@@ -88,7 +93,8 @@ public class MethodInliner {
 			methods.put(methodHead, methodBody);
 		}
 
-		log.println("[MINL] found " + methods.size() + " methods");
+		// log.println("[MINL] found " + methods.size() + " methods");
+		logger.trace("[MINL] found " + methods.size() + " methods");
 
 		// TODO: may need to copy all methods because later processed methods may use methods that have already inlined stuff
 		// (should not be a problem, worst case just generates more code, e.g. inlines recursive method once)
@@ -109,7 +115,8 @@ public class MethodInliner {
 	 * @param callstack
 	 */
 	private void processMethod(List<Instruction> methodBody, Stack<_VirtualMethodHead> callstack) {
-		log.println("[MINL] processing method: " + callstack.peek().getLabel());
+		// log.println("[MINL] processing method: " + callstack.peek().getLabel());
+		logger.trace("[MINL] processing method: " + callstack.peek().getLabel());
 
 		// search for method invocations to inline them
 		for (int i = 0; i < methodBody.size(); ++i) {
@@ -134,11 +141,14 @@ public class MethodInliner {
 				methodBody.addAll(i, inlinedMethodBody);
 				if (inlinedMethodBody.size() > 1) {
 					inlinedMethodBody.get(0).setComment("start of inlined method " + invokedMethod.getLabel());
+					logger.trace("start of inlined method " + invokedMethod.getLabel());
 					inlinedMethodBody.get(inlinedMethodBody.size() - 1)
 							.setComment("end of inlined method " + invokedMethod.getLabel());
+					logger.trace("end of inlined method " + invokedMethod.getLabel());
 				}
 				else {
 					inlinedMethodBody.get(0).setComment("inlined method " + invokedMethod.getLabel());
+					logger.trace("inlined method " + invokedMethod.getLabel());
 				}
 
 				prev.setNext(inlinedMethodBody.get(0));
@@ -161,9 +171,11 @@ public class MethodInliner {
 	 */
 	private List<Instruction> getInlinedMethodBody(_VirtualMethodInvoke methodCall, Stack<_VirtualMethodHead> callstack) {
 		_VirtualMethodHead invokedMethod = (_VirtualMethodHead) methodCall.getOutgoingBranches().iterator().next();
-		log.println("[MINL] inlining method " + invokedMethod.getLabel());
+		// log.println("[MINL] inlining method " + invokedMethod.getLabel());
+		logger.trace("[MINL] inlining method " + invokedMethod.getLabel());
 		if (callstack.contains(invokedMethod)) {
-			log.println("[MINL] cannot inline recursive method " + invokedMethod.getLabel());
+			// log.println("[MINL] cannot inline recursive method " + invokedMethod.getLabel());
+			logger.trace("[MINL] cannot inline recursive method " + invokedMethod.getLabel());
 			return null;
 		}
 		callstack.push(invokedMethod);
@@ -251,6 +263,7 @@ public class MethodInliner {
 		else {
 			// create method exit point
 			JumpDest exitPoint = new JumpDest("end_of_" + invokedMethod.getLabel() + "__" + exitpointId.getAndIncrement());
+			logger.trace("New Jump Dest end_of_" + invokedMethod.getLabel() + "__" + exitpointId.getAndIncrement());
 			exitPoint.setInput(Instruction.NO_VARIABLES);
 			exitPoint.setOutput(Instruction.NO_VARIABLES);
 
@@ -266,6 +279,7 @@ public class MethodInliner {
 
 				// create return jump
 				Jump exitJump = new Jump(exitPoint.getLabel());
+				logger.trace("Jump exit point " + exitPoint.getLabel());
 				exitJump.setInput(Instruction.NO_VARIABLES);
 				exitJump.setOutput(Instruction.NO_VARIABLES);
 

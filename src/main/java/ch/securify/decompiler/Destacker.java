@@ -39,6 +39,8 @@ import ch.securify.utils.StackUtil;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -84,6 +86,8 @@ public class Destacker {
 
 	private static boolean DEBUG = false;
 
+	private static final Logger logger = LogManager.getLogger();
+
 	/**
 	 * Decompile the bytecode.
 	 * @param rawInstructions EVM instructions.
@@ -93,6 +97,8 @@ public class Destacker {
 	 */
 	public void decompile(RawInstruction[] rawInstructions, InstructionFactory instructionFactory, Multimap<Integer, Integer> jumps,
 			Multimap<Integer, Integer> controlFlowGraph, MethodDetector methodDetector, final PrintStream log) {
+
+		logger.debug("Destacker. Decompile by partially executing EVM");
 	    if (DEBUG)
 		    this.log = log;
 	    else
@@ -138,7 +144,7 @@ public class Destacker {
 			if (instructions[pc] != null) {
 				int prevInstrOpcode = prevNonNullItem(pc, rawInstructions).opcode;
 				if (pc != branchStartOffset && opcode == OpCodes.JUMPDEST && prevInstrOpcode != OpCodes.JUMP) {
-					log.println("linearly reached code that was already processed @" + HexPrinter.toHex(pc));
+					logger.trace("linearly reached code that was already processed @" + HexPrinter.toHex(pc));
 					// need to do stack merging
 					handleStackMerging(evmStack, prevNonNullIndex(pc, rawInstructions), pc);
 					return;
@@ -147,17 +153,25 @@ public class Destacker {
 				throw new IllegalStateException("Instruction @" + toHex(pc) + " was already processed");
 			}
 
-			//log.print("[DS@" + toHex(currentMethod) + "]" + (currentMethod == 0 ? "" : "  ") + " decompiling @" + toHex(pc) + " " + OpCodes.getOpName(rawInstructions[pc].opcode));
+			/* logger.trace("[DS@" + toHex(currentMethod) + "]"
+					+ (currentMethod == 0 ? "" : "  ") +
+					" decompiling PC@" + toHex(pc) + " " +
+					OpCodes.getOpName(rawInstructions[pc].opcode)); */
 
 			instructions[pc] = instructionFactory.createAndApply(rawInstruction, evmStack);
 
-			//log.println(" > " + evmStack.size());
+			logger.trace("[DS@" + toHex(currentMethod) + "]"
+					+ (currentMethod == 0 ? "" : "  ") +
+					" decompiling pc@" + toHex(pc) + " " +
+					OpCodes.getOpName(rawInstructions[pc].opcode) +
+					"\t EVM StkSz: "+ evmStack.size());
 
 			if (opcode == OpCodes.JUMP) {
 				boolean isMethodReturn = ControlFlowDetector.isJumpMethodReturn(pc, rawInstructions);
 
 				if (!isMethodReturn && jumps.get(pc).size() != 1) {
 					// only allow multiple targets for a method return
+					logger.error("Non-return jump has multiple possible targets");
 					throw new AssumptionViolatedException("Non-return jump has multiple possible targets");
 				}
 
@@ -188,6 +202,8 @@ public class Destacker {
 
 					// verify that next instruction is a jumpdest that can only be reached by method returns
 					if (rawInstructions[pc + 1].opcode != OpCodes.JUMPDEST) {
+						logger.error(toHex(pc) + " is a method call jump, but " +
+								toHex(pc + 1) + " is no jumpdest");
 						throw new AssumptionViolatedException(toHex(pc) + " is a method call jump, but " +
 								toHex(pc + 1) + " is no jumpdest");
 					}
@@ -195,6 +211,8 @@ public class Destacker {
 						boolean allAreReturnJumps = jumpsInv.get(pc + 1).stream()
 								.allMatch(jumpSrc -> ControlFlowDetector.isJumpMethodReturn(jumpSrc, rawInstructions));
 						if (!allAreReturnJumps) {
+							logger.error(toHex(pc) + " is a method call jump, but " +
+									toHex(pc + 1) + " is no method return jumpdest");
 							throw new AssumptionViolatedException(toHex(pc) + " is a method call jump, but " +
 									toHex(pc + 1) + " is no method return jumpdest");
 						}
@@ -221,6 +239,7 @@ public class Destacker {
 					// jump is a method return
 					if (returnVarsForMethod.containsKey(currentMethod)) {
 						// TODO: declare return vars for each return statement (cross-check that all returns have the same amount of vars)
+						logger.error("Method @" + toHex(currentMethod) + " has multiple returns");
 						throw new AssumptionViolatedException(
 								"Method @" + toHex(currentMethod) + " has multiple returns");
 					}
@@ -233,6 +252,7 @@ public class Destacker {
 					// jump is not a method call/return
 					if (jumps.get(pc).size() != 1) {
 						// this should have been checked already
+						logger.error("Non-return jump has multiple possible targets");
 						throw new AssumptionViolatedException("Non-return jump has multiple possible targets");
 					}
 					int jumpdest = jumps.get(pc).iterator().next();
@@ -253,6 +273,7 @@ public class Destacker {
 			}
 			else if (opcode == OpCodes.JUMPI) {
 				if (jumps.get(pc).size() != 1) {
+					logger.error("conditional jump @" + toHex(pc) + " has multiple jump targets");
 					throw new AssumptionViolatedException("conditional jump @" + toHex(pc) + " has multiple jump targets");
 				}
 				int jumpdest = jumps.get(pc).iterator().next();
@@ -288,9 +309,10 @@ public class Destacker {
 		if (!canonicalStackForBranchJoinJumpdest.containsKey(jumpdest)) {
 			// if so, check for duplicate variables in the stack, which may cause merge conflicts
 			if (stack.size() != stack.stream().distinct().count()) {
-				log.println("undup canonical stack @" + toHex(jumpdest));
+				logger.trace("undup canonical stack @" + toHex(jumpdest));
 				// map duplicate variables to new ones
 				if (jumpsrc != -1 && variableReassignments.containsKey(jumpsrc) || jumpsrc == -1 && variableReassignmentsInline.containsKey(jumpsrc)) {
+					logger.error("reassignment does already exist");
 					throw new IllegalStateException("reassignment does already exist");
 				}
 				Map<Variable, Variable> reassignments = new HashMap<>();
@@ -322,6 +344,7 @@ public class Destacker {
 	private void handleStackMerging(Stack<Variable> localStack, int jumpsrc, int jumpdest) {
 		// destination already destacked, may need to map current stack
 		if (!canonicalStackForBranchJoinJumpdest.containsKey(jumpdest)) {
+			logger.error("target jumpdest processed, but no canonical stack defined");
 			throw new IllegalStateException("target jumpdest processed, but no canonical stack defined");
 		}
 		Stack<Variable> canonicalStack = canonicalStackForBranchJoinJumpdest.get(jumpdest);
@@ -341,7 +364,7 @@ public class Destacker {
 				}
 			}*/
 			// so check if all paths lead to error, and if so just don't merge the stacks, since it doesn't matter anyway (?)
-			log.println("Branch merge: stack size mismatch: canonical @" + toHex(jumpdest) +
+			logger.trace("Branch merge: stack size mismatch: canonical @" + toHex(jumpdest) +
 					" with size " + canonicalStack.size() + " vs local @" + toHex(jumpsrc) + " with size " + localStack.size());
 		}
 		Multimap<Variable, Variable> mapToCanonical = HashMultimap.create();
@@ -349,16 +372,18 @@ public class Destacker {
 		for (int i = 1, n = Math.min(localStack.size(), canonicalStack.size()); i <= n; ++i) {
 			mapToCanonical.put(localStack.get(localStack.size() - i), canonicalStack.get(canonicalStack.size() - i));
 		}
-		log.println("stack merging from @" + toHex(jumpsrc) + " into @" + toHex(jumpdest));
+		logger.trace("stack merging from @" + toHex(jumpsrc) + " into @" + toHex(jumpdest));
 		mapToCanonical.asMap().forEach((variable, canonicals) ->
 				canonicals.forEach(canonical -> log.println(" " + canonical + " <- " + variable)));
 
 		if (mapToCanonical.size() != mapToCanonical.values().stream().distinct().count()) {
+			logger.error("a canonical variable is assigned multiple times");
 			throw new IllegalStateException("a canonical variable is assigned multiple times");
 		}
 
 		// create re-assignemt instructions
 		if (variableReassignments.containsKey(jumpsrc)) {
+			logger.error("reassignment does already exist");
 			throw new IllegalStateException("reassignment does already exist");
 		}
 		Map<Variable, Variable> reassignments = new LinkedHashMap<>();
@@ -374,7 +399,7 @@ public class Destacker {
 			if (wasAssignedTo.contains(local)) {
 				Variable tmpVar = new Variable();
 				temporaries.put(local, tmpVar);
-				log.println("swap conflict for: " + canonical + " <- " + local + "; created temp variable: " + tmpVar);
+				logger.trace("swap conflict for: " + canonical + " <- " + local + "; created temp variable: " + tmpVar);
 			}
 			wasAssignedTo.add(canonical);
 		});
@@ -401,7 +426,7 @@ public class Destacker {
 	public Instruction[] getInstructions() {
 		Resolver<RawInstruction, String> labelResolver = instructionFactory.getLabelResolver();
 
-		log.println("Generating virtual method instructions...");
+		logger.debug("Generating virtual method instructions...");
 		// convert jumps and jumpdests to method statements
 		IntStream.range(0, instructions.length)
 				.filter(offset -> instructions[offset] != null)
@@ -454,7 +479,7 @@ public class Destacker {
 									.forEach(target -> jumpInstruction.addOutgoingBranch(instructions[target]));
 						}
 						else {
-							log.println("replacing error jump with throw @" + toHex(offset));
+							logger.trace("replacing error jump with throw @" + toHex(offset));
 							// error jump, replace with throw()
 							instr = new Invalid().setInput(NO_VARIABLES).setOutput(NO_VARIABLES)
 									.setRawInstruction(instr.getRawInstruction());
@@ -568,6 +593,7 @@ public class Destacker {
 			}
 			else {
 				if (nextNonNullItem(bco, rawInstructions).opcode != OpCodes.JUMPDEST) {
+					logger.error("expected JUMPDEST instruction after marked linear code");
 					throw new IllegalStateException("expected JUMPDEST instruction after marked linear code");
 				}
 				// need to reassign in linear code, i.e. just before the jumpdest
@@ -591,6 +617,7 @@ public class Destacker {
 
 		variableReassignmentsInline.forEach((bco, variableMap) -> {
 			if (rawInstructions[bco].opcode != OpCodes.JUMPDEST) {
+				logger.error("inline reassignment expected to be used only at JUMPDEST");
 				throw new IllegalStateException("inline reassignment expected to be used only at JUMPDEST");
 			}
 			// need to reassign in linear code, i.e. just before the jumpdest
