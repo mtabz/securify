@@ -221,7 +221,7 @@ public class ConstantPropagation {
 
 				// check if any input variable depends on an unprocessed instructions
 				// in that case we can't know the output values
-				logger.trace("Checking if any input var of" + instruction.getDebugRepresentation() + "depends on unproc.d instrs");
+				logger.trace("Checking if any input var of " + instruction.getDebugRepresentation() + " depends on unproc.d instrs");
 				boolean foundUnprocessedDependency = false;
 				out: for (Variable input : instruction.getInput()) {
 					// search all instructions that have this variable as an output.

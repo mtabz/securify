@@ -96,7 +96,7 @@ public class AbstractDecompiler {
 		// print tags (jumpdests)
 		/* log.println();
 		log.println("Tags:"); */
-		logger.debug("Tags:");
+		logger.debug("Finding Tags:");
 		/* Map bytecode offsets to tags/labels and vice versa. */
 		BiMap<Integer, String> tags = HashBiMap.create();
 		{

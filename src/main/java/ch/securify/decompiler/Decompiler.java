@@ -77,6 +77,7 @@ public class Decompiler extends AbstractDecompiler {
 		/* Ordered list of bytecode offsets of JUMPDEST instructions. */
 		List<Integer> jumpDestinations = new ArrayList<>();
 
+		logger.debug("Parsing raw instructions");
 		parseRawInstructions(bytecode, rawInstructions, jumpDestinations);
 
 		BiMap<Integer, String> tags = findTags(log, jumpDestinations);

@@ -144,14 +144,14 @@ public class Main {
             logger.info("Processing contract: " + elt.getKey());
 
             String bin = elt.getValue().getAsJsonObject().get("bin-runtime").getAsString();
-            logger.debug("bin-runtime: ", elt);
+            logger.debug("bin-runtime: " + elt);
             if (bin.equals("")) {
                 log.println("Skipping empty contract: " + elt.getKey());
                 logger.info("Skipping empty contract: " + elt.getKey());
                 continue;
             }
             String map = elt.getValue().getAsJsonObject().get("srcmap-runtime").getAsString();
-            logger.debug("srcmap-runtime: ", map);
+            logger.debug("srcmap-runtime: " + map);
 
             List<String> lines = Collections.singletonList(bin);
             File binFile = File.createTempFile("securify_binary_", ".bin.hex");
