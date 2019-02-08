@@ -25,6 +25,8 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -78,6 +80,8 @@ public abstract class AbstractDataflow {
     private static String DL_FOLDER;
     private String WORKSPACE, WORKSPACE_OUT;
 
+    protected static final Logger logger = LogManager.getLogger();
+
     public static void setDlFolder(String folder) {
         DL_FOLDER = Objects.requireNonNull(folder);
     }
@@ -97,6 +101,7 @@ public abstract class AbstractDataflow {
             copy(getResource(resourceName), os);
             os.close();
             if (!binaryPath.setExecutable(true)) {
+                logger.error("Could not set the executable bit of a souffle binary in " + souffleDir);
                 throw new IOException("Could not set the executable bit of a souffle binary in " + souffleDir);
             }
         }
@@ -139,16 +144,18 @@ public abstract class AbstractDataflow {
         unk = getCode(UNK_CONST_VAL);
         appendRule("unk", unk);
 
-        log("Souffle Analysis");
+        logger.debug("Souffle Analysis");
 
         File fWORKSPACE = (new File(System.getProperty("java.io.tmpdir"), "souffle-" + UUID.randomUUID()));
         if (!fWORKSPACE.mkdir()) {
+            logger.error("Could not create temporary directory");
             throw new IOException("Could not create temporary directory");
         }
         WORKSPACE = fWORKSPACE.getAbsolutePath();
 
         File fWORKSPACE_OUT = new File(WORKSPACE + "_OUT");
         if (!fWORKSPACE_OUT.mkdir()) {
+            logger.error("Could not create temporary directory");
             throw new IOException("Could not create temporary directory");
         }
         WORKSPACE_OUT = fWORKSPACE_OUT.getAbsolutePath();
@@ -162,8 +169,8 @@ public abstract class AbstractDataflow {
         deriveIfPredicates();
 
         createProgramRulesFile();
-        log("Number of instructions: " + instrToCode.size());
-        log("Threshold: " + Config.THRESHOLD_COMPILE);
+        logger.debug("Number of instructions: " + instrToCode.size());
+        logger.debug("Threshold: " + Config.THRESHOLD_COMPILE);
 
         long start = System.currentTimeMillis();
         runCommand(new String[]{DL_EXEC, "-j", Integer.toString(Runtime.getRuntime().availableProcessors()), "-F", WORKSPACE, "-D", WORKSPACE_OUT});
@@ -228,6 +235,7 @@ public abstract class AbstractDataflow {
         if (Files.walk(rootPath).sorted(Comparator.reverseOrder())
                 .map(Path::toFile)
                 .map(File::delete).anyMatch(e -> !e)) {
+            logger.error("Failure while deleting files");
             throw new IOException("Failure while deleting files");
         }
     }
@@ -261,7 +269,7 @@ public abstract class AbstractDataflow {
                 return Status.UNSATISFIABLE;
             }
         } catch (IOException e) {
-            log("Souffle TIMEOUT, returns UNKNOWN");
+            logger.warn("Souffle TIMEOUT, returns UNKNOWN");
             return Status.UNKNOWN;
         }
     }
@@ -305,7 +313,10 @@ public abstract class AbstractDataflow {
     protected void createMStoreRule(Instruction instr, Variable offset, Variable var) {
         int offsetCode;
         if (offset.hasConstantValue()) {
-            log("Offset " + offset + ", int offset " + getInt(offset.getConstantValue()) + "memory var " + getMemoryVarForIndex(getInt(offset.getConstantValue())) + ", code " + getCode(getMemoryVarForIndex(getInt(offset.getConstantValue()))));
+            logger.trace("MStore Offset " + offset +
+                    ", int offset " + getInt(offset.getConstantValue()) +
+                    "memory var " + getMemoryVarForIndex(getInt(offset.getConstantValue())) +
+                    ", code " + getCode(getMemoryVarForIndex(getInt(offset.getConstantValue()))));
             offsetCode = getCode(getMemoryVarForIndex(getInt(offset.getConstantValue())));
         } else {
             offsetCode = unk;
@@ -317,6 +328,11 @@ public abstract class AbstractDataflow {
     protected void createSStoreRule(Instruction instr, Variable index, Variable var) {
         int indexCode;
         if (index.hasConstantValue()) {
+            logger.trace("SStore Index " + index +
+                    ", int offset " + getInt(index.getConstantValue()) +
+                    "storage var " + getStorageVarForIndex(getInt(index.getConstantValue())) +
+                    ", code " + getCode(getStorageVarForIndex(getInt(index.getConstantValue())))
+            );
             indexCode = getCode(getStorageVarForIndex(getInt(index.getConstantValue())));
         } else {
             indexCode = unk;
@@ -325,10 +341,18 @@ public abstract class AbstractDataflow {
     }
 
     protected void createAssignVarRule(Instruction instr, Variable output, Variable input) {
+        // TODO: This logging is not printing out useful info. Need to figure out how to translate in/out to smth useful
+        /* logger.trace("assignVar code " + getCode(instr) +
+                ", out " + getCode(output) +
+                ", in " + getCode(input)); */
         appendRule("assignVar", getCode(instr), getCode(output), getCode(input));
     }
 
     protected void createAssignTypeRule(Instruction instr, Variable var, Class type) {
+        // TODO: This logging is not printing out useful info. Need to figure out how to translate in/out to smth useful
+        /* logger.trace("assignType code " + getCode(instr) +
+                ", out " + getCode(var) +
+                ", in " + getCode(var)); */
         appendRule("assignType", getCode(instr), getCode(var), getCode(type));
     }
 
@@ -345,6 +369,7 @@ public abstract class AbstractDataflow {
         if (ruleToSB.containsKey(ruleName)) {
             sb = ruleToSB.get(ruleName);
         } else {
+            logger.error("unknown rule: " + ruleName);
             throw new RuntimeException("unknown rule: " + ruleName);
         }
         for (int i = 0; i < args.length - 1; i++) {
@@ -357,6 +382,7 @@ public abstract class AbstractDataflow {
 
     protected int getFreshCode() {
         if (bvCounter == Integer.MAX_VALUE) {
+            logger.error("Integer overflow.");
             throw new RuntimeException("Integer overflow.");
         }
         int freshCode = bvCounter;
@@ -398,12 +424,13 @@ public abstract class AbstractDataflow {
         } else if (o instanceof Variable) {
             return getCode((Variable) o);
         } else {
+            logger.error("Not supported object of a bit vector");
             throw new RuntimeException("Not supported object of a bit vector");
         }
     }
 
     protected void deriveAssignTypePredicates() {
-        log(">> Derive AssignType predicates <<");
+        logger.trace(">> Derive AssignType predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof Push
                     || instr instanceof CallValue
@@ -438,7 +465,7 @@ public abstract class AbstractDataflow {
                 createAssignTypeRule(instr, instr.getOutput()[0], instr.getClass());
             } else if (instr instanceof _VirtualMethodHead) {
                 for (Variable arg : instr.getOutput()) {
-                    log("Type of " + arg + " is unk");
+                    logger.trace("Type of " + arg + " is unk");
                     createAssignTopRule(instr, arg);
                     // assign the arguments as an abstract type (to check later
                     // for missing input validation)
@@ -447,34 +474,34 @@ public abstract class AbstractDataflow {
                     createAssignTypeRule(instr, arg, CallDataLoad.class);
                 }
             } else if (instr instanceof Call || instr instanceof StaticCall) {
-                log("Type of " + instr.getOutput()[0] + " is Call");
+                logger.trace("Type of " + instr.getOutput()[0] + " is Call");
                 createAssignTopRule(instr, instr.getOutput()[0]);
                 // assign the return value as an abstract type (to check later
                 // for unhandled exception)
                 appendRule("assignType", getCode(instr), getCode(instr.getOutput()[0]), getCode(instr.getOutput()[0]));
             } else if (instr instanceof BlockHash) {
-                log("Type of " + instr.getOutput()[0] + " is BlockHash");
+                logger.trace("Type of " + instr.getOutput()[0] + " is BlockHash");
                 createAssignTypeRule(instr, instr.getOutput()[0], instr.getClass());
-                // TODO: double check whether to propagate the type of the
-                // argument to the output of blockhash
+                // TODO: double check whether to propagate the type of the argument to the output of blockhash
                 createAssignVarRule(instr, instr.getOutput()[0], instr.getInput()[0]);
             } else if (instr instanceof ReturnDataCopy) {
                 // TODO: New memory-based rule here
+                logger.warn("Need New memory-based rule here");
             }
         }
     }
 
     protected void deriveHeapPredicates() {
-        log(">> Derive MStore and MLoad predicates <<");
+        logger.trace(">> Derive MStore and MLoad predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof MStore || instr instanceof MStore8) {
                 Variable var = instr.getInput()[1];
                 Variable offset = instr.getInput()[0];
-                log("mstore instruction: " + instr.getStringRepresentation());
+                logger.trace("mstore instruction: " + instr.getStringRepresentation());
                 createMStoreRule(instr, offset, var);
             }
             if (instr instanceof MLoad) {
-                log("mload instruction: " + instr.getStringRepresentation());
+                logger.trace("mload instruction: " + instr.getStringRepresentation());
                 Variable var = instr.getOutput()[0];
                 Variable offset = instr.getInput()[0];
                 createMLoadRule(instr, offset, var);
@@ -484,7 +511,7 @@ public abstract class AbstractDataflow {
 
 
     protected void deriveStorePredicates() {
-        log(">> Derive SStore and SLoad predicates <<");
+        logger.trace(">> Derive SStore and SLoad predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof SStore) {
                 Variable index = instr.getInput()[0];
@@ -495,7 +522,7 @@ public abstract class AbstractDataflow {
             if (instr instanceof SLoad) {
                 Variable var = instr.getOutput()[0];
                 Variable index = instr.getInput()[0];
-                log("sload instruction" + instr.getStringRepresentation());
+                logger.trace("sload instruction" + instr.getStringRepresentation());
                 createSLoadRule(instr, index, var);
             }
         }
@@ -503,7 +530,7 @@ public abstract class AbstractDataflow {
 
 
     protected void deriveAssignVarPredicates() {
-        log(">> Derive assign predicates <<");
+        logger.trace(">> Derive assign predicates <<");
         for (Instruction instr : instructions) {
             log(instr.getStringRepresentation());
 
@@ -545,8 +572,8 @@ public abstract class AbstractDataflow {
                     int length = getInt(instr.getInput()[1].getConstantValue());
                     //assert(startOffset % 32 == 0);
                     for (int offset = startOffset; offset < startOffset + length; offset += 4) {
-                        log("sha3: " + instr + " " + instr.getOutput()[0]);
-                        log("Offset " + offset + ", memory var " + getMemoryVarForIndex(offset) + ", code " + getCode(getMemoryVarForIndex(offset)));
+                        logger.trace("sha3: " + instr + " " + instr.getOutput()[0]);
+                        logger.trace("Offset " + offset + ", memory var " + getMemoryVarForIndex(offset) + ", code " + getCode(getMemoryVarForIndex(offset)));
                         appendRule("sha3", getCode(instr), getCode(instr.getOutput()[0]), getCode(getMemoryVarForIndex(offset)));
                     }
                 } else {

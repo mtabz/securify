@@ -17,5 +17,8 @@
     <logger name="ch.securify.decompiler" level="TRACE" additivity="false">
   		<AppenderRef ref="LogFile"/>
   	</logger>
+    <logger name="ch.securify.analysis" level="TRACE" additivity="false">
+      <AppenderRef ref="LogFile"/>
+    </logger>
   </Loggers>
 </Configuration>

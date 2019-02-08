@@ -102,7 +102,7 @@ public class MayImplicitDataflow extends AbstractDataflow {
 
     @Override
     protected void deriveFollowsPredicates() {
-        log(">> Derive follows predicates <<");
+        logger.trace(">> Derive follows predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof BranchInstruction) {
                 BranchInstruction branchInstruction = (BranchInstruction) instr;
@@ -122,7 +122,7 @@ public class MayImplicitDataflow extends AbstractDataflow {
 
     @Override
     protected void deriveIfPredicates() {
-        log(">> Derive TaintElse and TaintThen predicates <<");
+        logger.trace(">> Derive TaintElse and TaintThen predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof JumpI) {
                 JumpI ifInstr = (JumpI) instr;
@@ -132,17 +132,17 @@ public class MayImplicitDataflow extends AbstractDataflow {
                 Instruction mergeInstr = ifInstr.getMergeInstruction();
 
                 if (thenInstr != null && thenInstr != mergeInstr) {
-                    log("then instruction: " + thenInstr.getStringRepresentation());
+                    logger.trace("then instruction: " + thenInstr.getStringRepresentation());
                     createTaintRule(instr, thenInstr, condition);
                 }
 
                 if (elseInstr != null && elseInstr != mergeInstr ) {
-                    log("else instruction: " + elseInstr.getStringRepresentation());
+                    logger.trace("else instruction: " + elseInstr.getStringRepresentation());
                     createTaintRule(instr, elseInstr, condition);
                 }
 
                 if (mergeInstr != null) {
-                    log("merge instruction: " + mergeInstr.getStringRepresentation());
+                    logger.trace("merge instruction: " + mergeInstr.getStringRepresentation());
                     createEndIfRule(instr, mergeInstr);
                 }
             }

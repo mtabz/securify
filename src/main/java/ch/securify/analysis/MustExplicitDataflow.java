@@ -74,15 +74,15 @@ public class MustExplicitDataflow extends AbstractDataflow {
 
     @Override
     protected void deriveFollowsPredicates() {
-        log(">> Derive follows predicates <<");
+        logger.trace(">> Derive follows predicates <<");
         for (Instruction instr : instructions) {
 
             if (instr instanceof JumpDest) {
                 if (((JumpDest) instr).getIncomingBranches().size() == 1 && instr.getPrev() == null) {
-                    log("One-Branch Tag fact: " + instr);
+                    logger.trace("One-Branch Tag fact: " + instr);
                     appendRule("oneBranchTag", getCode(instr));
                 }
-                log("Tag fact: " + instr);
+                logger.trace("Tag fact: " + instr);
                 appendRule("tag", getCode(instr));
             }
 
@@ -126,14 +126,14 @@ public class MustExplicitDataflow extends AbstractDataflow {
 
     @Override
     protected void deriveIfPredicates() {
-        log(">> Derive TaintElse and TaintThen predicates <<");
+        logger.trace(">> Derive TaintElse and TaintThen predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof JumpI) {
                 JumpI ifInstr = (JumpI) instr;
                 Instruction mergeInstr = ifInstr.getMergeInstruction();
 
                 if (mergeInstr != null) {
-                    log("merge instruction: " + mergeInstr.getStringRepresentation());
+                    logger.trace("merge instruction: " + mergeInstr.getStringRepresentation());
                     createEndIfRule(instr, mergeInstr);
                 }
             }
@@ -163,7 +163,7 @@ public class MustExplicitDataflow extends AbstractDataflow {
             if (to.getPrev() != null) {
                 incomingBranches.add(to.getPrev());
             }
-            log("JumpDest: " + to + " with incoming branches: " + incomingBranches);
+            logger.trace("JumpDest: " + to + " with incoming branches: " + incomingBranches);
 
 //            if (incomingBranches.size() == 1) {
 //                //
