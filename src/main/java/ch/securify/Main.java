@@ -215,9 +215,11 @@ public class Main {
         contractResult.decompiled = true;
 
         if (decompilationOutputFile != null) {
-            if (new File(decompilationOutputFile).getAbsoluteFile().getParentFile().mkdirs()) {
+            File dir = new File(decompilationOutputFile).getAbsoluteFile().getParentFile();
+            dir.mkdirs();
+            if (!dir.exists()) {
                 logger.error("Error while making directory");
-                throw new IOException("Error while making directory");
+                throw new IOException("Error while making directory.");
             }
 
             Variable.setDebug(false);
@@ -284,8 +286,10 @@ public class Main {
         if (args.livestatusfile != null) {
             lStatusFile = new File(args.livestatusfile);
             if (lStatusFile.getParentFile() != null) {
-                if (!lStatusFile.getParentFile().mkdirs()) {
-                    throw new IOException("Error while making directory");
+                lStatusFile.getParentFile().mkdirs();
+                if (!lStatusFile.getParentFile().exists()) {
+                    logger.error("Error while making directory.");
+                    throw new IOException("Error while making directory.");
                 }
             }
         } else {
@@ -404,6 +408,7 @@ public class Main {
         // allPatterns.add(new UnprivilegedSelfdestruct());
         allPatterns.add(new UnrestrictedEtherFlow());
         allPatterns.add(new UnrestrictedWrite());
+        allPatterns.add(new RepeatedCall());
 //        allPatterns.add(new UnsafeCallTarget());
 //        allPatterns.add(new UnsafeDependenceOnBlock());
 //        allPatterns.add(new UnsafeDependenceOnGas());
