@@ -140,7 +140,7 @@ public class OpCodes {
 	 * @return
 	 */
 	public static int SWAP(int index) {
-		return 0x80 + index - 1;
+		return 0x90 + index - 1;
 	}
 
 	/**
