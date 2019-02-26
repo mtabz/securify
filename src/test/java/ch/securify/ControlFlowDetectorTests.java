@@ -16,9 +16,120 @@ import java.util.List;
 import static java.lang.System.*;
 import static org.junit.Assert.*;
 
-public class ControlFlowDetectorTest {
+public class ControlFlowDetectorTests {
+    /**
+     * Test cases:
+     * 1. Long jumps should not cause any issues
+     * 2. For loops should work
+     * 3. Function calls should work
+     * 4. If-Else statements should work
+     * 5. Recursion should work
+     */
+    /**
+     * TODO: Separate out RawInstruction population and branchSrcs verification into Before and After primitives
+     */
+    @Test
+    public void testIfElse () {
+        // What branches should be found at the end of this?
+        List<Integer> correctBranchSrcs = Arrays.asList(0, 9, 16, 17, 22, 24);
+
+        RawInstruction listInstructions[];
+        try {   // Try to catch exceptions in decodeHex class
+            // Create raw instructions
+            // RawInstruction[] rawInstructions = {
+            listInstructions = new RawInstruction[]{
+                    new RawInstruction(OpCodes.PUSH(1), Hex.decodeHex("00"), 0, 1),
+                    new RawInstruction(OpCodes.PUSH(1), Hex.decodeHex("64"), 2, 2),
+                    new RawInstruction(OpCodes.DUP(2), null, 4, 3),
+                    new RawInstruction(OpCodes.LT, null, 5, 4),
+                    new RawInstruction(OpCodes.ISZERO, null, 6, 5),
+                    new RawInstruction(OpCodes.PUSH(1), Hex.decodeHex("11"), 7, 6),
+                    new RawInstruction(OpCodes.JUMPI, null, 9, 7),
+                    new RawInstruction(OpCodes.PUSH(1), Hex.decodeHex("FF"), 10, 8),
+                    new RawInstruction(OpCodes.SWAP(1), null, 12, 9),
+                    new RawInstruction(OpCodes.POP, null, 13, 10),
+                    new RawInstruction(OpCodes.PUSH(1), Hex.decodeHex("17"), 14, 11),
+                    new RawInstruction(OpCodes.JUMP, null, 16, 12),
+                    new RawInstruction(OpCodes.JUMPDEST, null, 17, 13),
+                    new RawInstruction(OpCodes.PUSH(1), Hex.decodeHex("40"), 18, 14),
+                    new RawInstruction(OpCodes.SWAP(1), null, 20, 15),
+                    new RawInstruction(OpCodes.POP, null, 21, 16),
+                    new RawInstruction(OpCodes.JUMPDEST, null, 22, 17),
+                    new RawInstruction(OpCodes.POP, null, 23, 18),
+                    new RawInstruction(OpCodes.STOP, null, 24, 19),
+                    new RawInstruction(OpCodes.INVALID, null, 2102, -1)};
+        } catch (Exception e) {
+            listInstructions = new RawInstruction[] {new RawInstruction(OpCodes.INVALID, null, 0, 1)};
+            out.println(e);
+            assert(false);
+        }
+
+        // Populate rawInstructions from the list of Instructions
+        RawInstruction[] rawInstructions = new RawInstruction[listInstructions[listInstructions.length-1].offset+1];
+        for (int i=0; i<listInstructions.length; i++) {
+            rawInstructions[listInstructions[i].offset] = listInstructions[i];
+        }
+
+        ControlFlowDetector controlFlowDetector = new ControlFlowDetector();
+        controlFlowDetector.computeBranches(rawInstructions, out);
+
+        /* Then getBranches() and verify that the rxd branches are what is expected
+         * Control flow graph: maps from jumps to possible jump destinations and
+         * from jump destinations to the next jump instruction. */
+        Multimap<Integer, Integer> controlFlowGraph = controlFlowDetector.getBranches();
+        List<Integer> branchSrcs = new ArrayList<>(controlFlowGraph.asMap().keySet());
+        Collections.sort(branchSrcs);
+
+        assertEquals(correctBranchSrcs,branchSrcs);
+    }
+
+    @Test
+    public void testForLoop () {
+    }
+
+    @Test
+    public void testLongJump () {
+        // What branches should be found at the end of this?
+        List<Integer> correctBranchSrcs = Arrays.asList(0, 3, 2100, 2101);
+
+        RawInstruction listInstructions[];
+        try {   // Try to catch exceptions in decodeHex class
+            // Create raw instructions
+            // RawInstruction[] rawInstructions = {
+            listInstructions = new RawInstruction[]{
+                    new RawInstruction(OpCodes.PUSH(2), Hex.decodeHex("0834"), 0, 1),
+                    new RawInstruction(OpCodes.JUMP, null, 3, 2),
+                    new RawInstruction(OpCodes.JUMPDEST, null, 2100, 3),
+                    new RawInstruction(OpCodes.STOP, null, 2101, 4),
+                    new RawInstruction(OpCodes.INVALID, null, 2102, -1)};
+        } catch (Exception e) {
+            listInstructions = new RawInstruction[] {new RawInstruction(OpCodes.INVALID, null, 0, 1)};
+            out.println(e);
+            assert(false);
+        }
+
+        // Populate rawInstructions from the list of Instructions
+        RawInstruction[] rawInstructions = new RawInstruction[listInstructions[listInstructions.length-1].offset+1];
+        for (int i=0; i<listInstructions.length; i++) {
+            rawInstructions[listInstructions[i].offset] = listInstructions[i];
+        }
+
+        ControlFlowDetector controlFlowDetector = new ControlFlowDetector();
+        controlFlowDetector.computeBranches(rawInstructions, out);
+
+        /* Then getBranches() and verify that the rxd branches are what is expected
+         * Control flow graph: maps from jumps to possible jump destinations and
+         * from jump destinations to the next jump instruction. */
+        Multimap<Integer, Integer> controlFlowGraph = controlFlowDetector.getBranches();
+        List<Integer> branchSrcs = new ArrayList<>(controlFlowGraph.asMap().keySet());
+        Collections.sort(branchSrcs);
+
+        assertEquals(correctBranchSrcs,branchSrcs);
+    }
+
      /**
-     * Simple control flow. The instructions in this correspond to LockedEther.sol
+     * Control flow with mulitple jumps. The instructions in this correspond to LockedEther.sol (compiled
+      * with solc v0.5.2)
      */
     @Test
     public void testLockedEtherControlFlow() {
