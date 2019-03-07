@@ -126,7 +126,8 @@ public class MustExplicitDataflow extends AbstractDataflow {
 
     @Override
     protected void deriveIfPredicates() {
-        logger.trace(">> Derive TaintElse and TaintThen predicates <<");
+        // logger.trace(">> Derive TaintElse and TaintThen predicates <<");
+        logger.trace(">> Derive If predicates <<");
         for (Instruction instr : instructions) {
             if (instr instanceof JumpI) {
                 JumpI ifInstr = (JumpI) instr;

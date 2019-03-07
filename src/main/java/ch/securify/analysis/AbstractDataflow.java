@@ -215,14 +215,17 @@ public abstract class AbstractDataflow {
     }
 
     protected void createProgramRulesFile() {
+        logger.trace("Program Rules File:");
         for (String rule : ruleToSB.keySet()) {
             BufferedWriter bwr;
             try {
                 bwr = new BufferedWriter(new FileWriter(new File(WORKSPACE + "/" + rule + ".facts")));
                 bwr.write(ruleToSB.get(rule).toString());
                 bwr.close();
+                logger.trace("Rule " + rule +": \n"+ ruleToSB.get(rule).toString());
             } catch (IOException e) {
                 e.printStackTrace();
+                logger.error("Rules_ " + e);
             }
         }
     }
@@ -516,7 +519,7 @@ public abstract class AbstractDataflow {
             if (instr instanceof SStore) {
                 Variable index = instr.getInput()[0];
                 Variable var = instr.getInput()[1];
-                log("sstore instruction: " + instr.getStringRepresentation());
+                logger.trace("sstore instruction: " + instr.getStringRepresentation());
                 createSStoreRule(instr, index, var);
             }
             if (instr instanceof SLoad) {
@@ -542,9 +545,11 @@ public abstract class AbstractDataflow {
                     Variable storageVar = getStorageVarForIndex(storageOffsetValue);
 
                     // big hack: adding an assignType predicate below
+                    logger.trace("assignType: " + instr + ", lhs: " + lhs + ", storage var: " + storageVar);
                     appendRule("assignType", getCode(instr), getCode(lhs), getCode(storageVar));
                 } else {
                     appendRule("assignType", getCode(instr), getCode(lhs), unk);
+                    logger.trace("assignType: " + instr + ", lhs: " + lhs + ", storage var: unk");
                 }
             }
 
@@ -556,9 +561,11 @@ public abstract class AbstractDataflow {
                     Variable memoryVar = getMemoryVarForIndex(memoryOffsetValue);
 
                     // big hack: adding an assignType predicate below
+                    logger.trace("assignType: " + instr + ", lhs: " + lhs + ", memory var: " + memoryVar);
                     appendRule("assignType", getCode(instr), getCode(lhs), getCode(memoryVar));
                 } else {
                     appendRule("assignType", getCode(instr), getCode(lhs), unk);
+                    logger.trace("assignType: " + instr + ", lhs: " + lhs + ", memory var: unk");
                 }
             }
 

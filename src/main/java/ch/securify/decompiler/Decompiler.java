@@ -88,7 +88,7 @@ public class Decompiler extends AbstractDecompiler {
 		 * assumption: there are no dynamic jumps that may have multiple jump targets. */
 		Multimap<Integer, Integer> mapJumpsToDests = HashMultimap.create();
 
-		Multimap<Integer, Integer> controlFlowGraph = dectectControlFlow(log, rawInstructions, jumpDestinations, tags,
+		Multimap<Integer, Integer> controlFlowGraph = detectControlFlow(log, rawInstructions, jumpDestinations, tags,
 				controlFlowDetector, mapJumpsToDests);
 
 

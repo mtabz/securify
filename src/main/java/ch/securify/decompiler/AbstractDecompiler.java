@@ -137,8 +137,8 @@ public class AbstractDecompiler {
 	 * @param mapJumpsToDests
 	 * @return
 	 */
-	protected static Multimap<Integer, Integer> dectectControlFlow(final PrintStream log, RawInstruction[] rawInstructions, List<Integer> jumpDestinations, BiMap<Integer, String> tags, ControlFlowDetector controlFlowDetector,
-			Multimap<Integer, Integer> mapJumpsToDests) {
+	protected static Multimap<Integer, Integer> detectControlFlow(final PrintStream log, RawInstruction[] rawInstructions, List<Integer> jumpDestinations, BiMap<Integer, String> tags, ControlFlowDetector controlFlowDetector,
+																  Multimap<Integer, Integer> mapJumpsToDests) {
 				// scan for branches, generate a control flow graph
 				/* log.println();
 				log.println("Control Flow (Branches):"); */
