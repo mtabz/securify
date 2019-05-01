@@ -7,3 +7,5 @@ out/
 securify.ipr
 securify.iws
 __pycache__/
+logs/
+debugging/
