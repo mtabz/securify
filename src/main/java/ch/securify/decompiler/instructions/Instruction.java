@@ -145,6 +145,10 @@ public abstract class Instruction implements Cloneable {
 		if (getComment() != null) {
 			sb.append("\t // ").append(getComment());
 		}
+
+		if (getPrev() != null) {
+			sb.append("\t << prev: ").append(getPrev().getStringRepresentation());
+		}
 		return sb.toString();
 	}
 

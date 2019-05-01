@@ -23,6 +23,9 @@ import ch.securify.utils.Resolver;
 import ch.securify.decompiler.instructions.Byte;
 import ch.securify.decompiler.evm.RawInstruction;
 import ch.securify.decompiler.instructions.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Stack;
 
 public class InstructionFactory {
@@ -30,6 +33,8 @@ public class InstructionFactory {
 
 	private Resolver<RawInstruction, String> jumpResolver;
 	private Resolver<RawInstruction, String> labelResolver;
+
+	protected static final Logger logger = LogManager.getLogger();
 
 
 	/**
@@ -104,6 +109,8 @@ public class InstructionFactory {
 		for (int i = output.length - 1; i >= 0; --i) {
 			stack.push(output[i]);
 		}
+
+		logger.trace(instruction.getDebugRepresentation());
 
 		return instruction;
 	}
