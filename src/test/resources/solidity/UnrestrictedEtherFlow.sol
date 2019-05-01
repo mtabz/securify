@@ -1,9 +1,10 @@
+pragma solidity 0.5.1;
 contract Wallet {
-    address owner;
+    address payable owner;
 
-    function withdraw() {
+    function withdraw() payable public {
         owner.transfer(msg.value);
     }
 
-    function () payable {}
+    function () payable external {}
 }

@@ -66,9 +66,6 @@ public class Main {
         @Parameter(names = {"-fh", "--filehex"}, description = "contract runtime code to parse as a hex-encoded file")
         private String filehex;
 
-        @Parameter(names = {"-ca", "--contractaddress"}, description = "specific contract address to search for in the provided set of contracts")
-        private String contractaddress;
-
         @Parameter(names = {"-p", "--patterns"}, description = "csv list of patterns to be analyzed")
         private String patterns;
 
@@ -145,7 +142,7 @@ public class Main {
 
             String bin = elt.getValue().getAsJsonObject().get("bin-runtime").getAsString();
             logger.debug("bin-runtime: " + elt);
-            if (bin.equals("")) {
+            if ("".equals(bin)) {
                 log.println("Skipping empty contract: " + elt.getKey());
                 logger.info("Skipping empty contract: " + elt.getKey());
                 continue;
@@ -396,7 +393,6 @@ public class Main {
         // allPatterns.add(new DelegateCallWithUserInput());
         // allPatterns.add(new DivisionBeforeCallvalue());
         // allPatterns.add(new DivisionBeforeMultiply());
-        // TODO: buggy
         allPatterns.add(new LockedEther());
         // allPatterns.add(new DivisionBeforeCallvalue());
         // allPatterns.add(new DivisionBeforeMultiply());
